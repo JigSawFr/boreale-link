@@ -153,10 +153,11 @@ make test          # the host tests, with the address and undefined-behaviour sa
 `tests/codec` covers the JSON writer, the MQTT codec, the topic filters and
 the `key=value` reader with its schema and round trip; `tests/link_conf` the
 shared broker settings; `tests/app` the registry's files; `tests/cache` the
-shared cache of icons and names; `tests/notices` the JSON reader and the
-shared bell's files; `tests/session` runs the session against a fake broker
-kept in memory, with a scripted clock. CI runs them under gcc and clang, and
-builds every source for the Switch in devkitPro's image.
+shared cache of icons and names; `tests/prefs` the shared look;
+`tests/notices` the JSON reader and the shared bell's files; `tests/session`
+runs the session against a fake broker kept in memory, with a scripted
+clock. CI runs them under gcc and clang, and builds every source for the
+Switch in devkitPro's image.
 
 ## License
 
