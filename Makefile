@@ -10,7 +10,8 @@ INC     := -Isource -Itests
 codec_SRC   := source/bl_json.c source/bl_kv.c source/mqtt_packet.c tests/codec/test.c
 session_SRC := source/mqtt_packet.c source/mqtt_client.c source/bl_session.c tests/session/test.c
 link_conf_SRC := source/bl_kv.c source/bl_link_conf.c tests/link_conf/test.c
-TESTS       := codec session link_conf
+app_SRC     := source/bl_kv.c source/bl_app.c tests/app/test.c
+TESTS       := codec session link_conf app
 
 .PHONY: test clean
 test: $(addprefix $(OUT)/,$(TESTS))
