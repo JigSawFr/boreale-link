@@ -1,0 +1,48 @@
+name: pr-title
+
+# PRs are squash-merged, so the PR title becomes the commit message: it must
+# be a conventional commit with a scope (feat(session): …, fix(json): …).
+on:
+  pull_request_target:
+    types: [ opened, edited, synchronize, reopened ]
+  # In the merge queue the title was already checked: the job is skipped,
+  # which a required check counts as passed, rather than never reporting.
+  merge_group:
+
+permissions:
+  pull-requests: read
+
+# `opened` and `edited` often come together: only the newest check of a pull
+# request runs.
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-title:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            style
+            build
+            chore
+            ci
+            test
+            docs
+            revert
+            deps
+            security
+            change
+            deprecate
+            remove
+          requireScope: true
