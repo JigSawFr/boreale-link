@@ -385,13 +385,22 @@ static void test_kv(void)
     CHECK(!strcmp(s.keys[3], "empty") && !strcmp(s.values[3], ""));
     CHECK(!strcmp(s.keys[4], "last") && !strcmp(s.values[4], "no newline"));
 
-    // A key or a value too long for the reader skips its line.
+    memset(&s, 0, sizeof(s));
+    CHECK(bl_kv_each(text, strlen(text), collect, &s) == 0);
+
+    // A key or a value too long for the reader skips its line, counted.
     char longer[700];
     memset(longer, 'v', sizeof(longer));
     memcpy(longer, "k=", 2);
     memcpy(longer + 600, "\nok=1\n", 7);
     memset(&s, 0, sizeof(s));
-    bl_kv_each(longer, strlen(longer), collect, &s);
+    CHECK(bl_kv_each(longer, strlen(longer), collect, &s) == 1);
+    CHECK(s.n == 1 && !strcmp(s.keys[0], "ok"));
+    char long_key[80];
+    memset(long_key, 'k', BL_KV_KEY_MAX);
+    snprintf(long_key + BL_KV_KEY_MAX, sizeof(long_key) - BL_KV_KEY_MAX, "=1\nok=1\n");
+    memset(&s, 0, sizeof(s));
+    CHECK(bl_kv_each(long_key, strlen(long_key), collect, &s) == 1);
     CHECK(s.n == 1 && !strcmp(s.keys[0], "ok"));
 
     uint32_t u = 7;

@@ -41,9 +41,9 @@ bool bl_parse_bool(const char *s, bool *out)
     return false;
 }
 
-void bl_kv_each(const char *text, size_t len, BlKvFn fn, void *ctx)
+size_t bl_kv_each(const char *text, size_t len, BlKvFn fn, void *ctx)
 {
-    size_t i = 0;
+    size_t i = 0, skipped = 0;
     while (i < len) {
         size_t end = i;
         while (end < len && text[end] != '\n') end++;
@@ -60,7 +60,7 @@ void bl_kv_each(const char *text, size_t len, BlKvFn fn, void *ctx)
             if (eq < b) {
                 size_t ke = eq;
                 while (ke > a && (text[ke - 1] == ' ' || text[ke - 1] == '\t')) ke--;
-                char key[48], value[512];
+                char key[BL_KV_KEY_MAX], value[BL_KV_VALUE_MAX];
                 const size_t kn = ke - a, vn = b - eq - 1;
                 if (kn > 0 && kn < sizeof(key) && vn < sizeof(value)) {
                     memcpy(key, text + a, kn);
@@ -68,9 +68,12 @@ void bl_kv_each(const char *text, size_t len, BlKvFn fn, void *ctx)
                     memcpy(value, text + eq + 1, vn);
                     value[vn] = '\0';
                     fn(ctx, key, value);
+                } else if (kn > 0) {
+                    skipped++;
                 }
             }
         }
         i = end + 1;
     }
+    return skipped;
 }
