@@ -1,0 +1,48 @@
+name: ci
+
+# The host tests under gcc and clang with the sanitizers, and every source
+# built for the Switch in devkitPro's image, as the homebrews build them.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [ gcc, clang ]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: make test (${{ matrix.cc }})
+        run: make test CC=${{ matrix.cc }}
+
+  switch:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    container:
+      # The image PlayGuard builds with (its build.yml), pinned by digest.
+      image: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build every source for the Switch
+        run: |
+          set -e
+          CC="$DEVKITPRO/devkitA64/bin/aarch64-none-elf-gcc"
+          mkdir -p build/switch
+          for f in source/*.c; do
+            "$CC" -std=gnu11 -Wall -Wextra -Wshadow -Werror -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft \
+              -fPIE -ffunction-sections -fdata-sections -D__SWITCH__ -I"$DEVKITPRO/libnx/include" -Isource \
+              -c "$f" -o "build/switch/$(basename "$f" .c).o"
+          done
+          ls -l build/switch

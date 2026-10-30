@@ -1,0 +1,11 @@
+# The workflow actions are pinned to commit SHAs; Dependabot moves the SHA and
+# its version comment together. `ci(deps): …` passes pr-title.yml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
