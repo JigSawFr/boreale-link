@@ -23,6 +23,7 @@ of them; this code comes from its `source/link/`.
 | `source/bl_json.{h,c}` | A JSON writer into a fixed buffer. |
 | `source/bl_kv.{h,c}` | The flat files' reader: `key=value`, one per line, `#` comments; their `schema` and the round trip of the keys a version does not know. |
 | `source/bl_link_conf.{h,c}` | `sd:/config/boreale/link.conf`, the broker's settings every homebrew of the console shares: host, port, TLS, MQTT version, credentials, the console's id and name, the topic and discovery prefixes. |
+| `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases). |
 
 ## Using it
 
@@ -83,6 +84,19 @@ Being a `bl_kv` file with a `schema`, a homebrew of another version keeps
 the keys it does not know when it writes it, and never writes over a file
 of a newer schema.
 
+## The registry of the homebrews installed
+
+Each Boréale homebrew writes `sd:/config/boreale/apps/<module>.conf`
+(`bl_app`) when it starts, `<module>` being its topics' level
+(`playguard`, `playshelf`): its name, its version, where its `.nro` is and
+its icon (paths under the SD card's root; no icon: the `.nro`'s own), and
+the GitHub repository of its releases. It writes only when something
+changed, so the SD card is not written at each start. The others list the
+directory (`bl_app_module_of()` on each name) to know who is there: the
+shared bell's sections, a screen that lists and launches them, the update
+check made for all of them. A `bl_kv` file with a `schema`, like
+`link.conf`.
+
 ## Tests
 
 ```sh
@@ -91,7 +105,7 @@ make test          # the host tests, with the address and undefined-behaviour sa
 
 `tests/codec` covers the JSON writer, the MQTT codec, the topic filters and
 the `key=value` reader with its schema and round trip; `tests/link_conf` the
-shared broker settings; `tests/session` runs the session against a fake broker
+shared broker settings; `tests/app` the registry's files; `tests/session` runs the session against a fake broker
 kept in memory, with a scripted clock. CI runs them under gcc and clang, and
 builds every source for the Switch in devkitPro's image.
 
