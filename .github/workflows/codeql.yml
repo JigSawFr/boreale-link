@@ -1,0 +1,44 @@
+name: codeql
+
+# Static analysis of the C (the MQTT client, TLS, the readers) and the
+# workflows themselves, on the pull request that introduces a problem, plus a
+# weekly run so that a newly published query also finds old code. Findings
+# land in the Security tab and as annotations on the PR. The homebrews that
+# take this library as a submodule leave library/ out of their own scan.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '37 5 * * 4'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      # The action reads its own run to attach the analysis to the right commit.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # build-mode none: the C is extracted from the sources, the Switch paths
+      # (bl_tls, bl_net under __SWITCH__) and the host ones alike.
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: c-cpp, actions
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - build
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
