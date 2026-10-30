@@ -25,6 +25,7 @@ of them; this code comes from its `source/link/`.
 | `source/bl_link_conf.{h,c}` | `sd:/config/boreale/link.conf`, the broker's settings every homebrew of the console shares: host, port, TLS, MQTT version, credentials, the console's id and name, the topic and discovery prefixes. |
 | `source/bl_jread.{h,c}` | A JSON reader without allocation: the text cut into tokens kept in the caller's array, strings unescaped, the members a version does not know copied as written. |
 | `source/bl_notices.{h,c}` | `sd:/config/boreale/notices/<module>.json`, the shared bell: each homebrew's notices (to do, going on, failed, for information), already written in the console's language, each with a route that opens its homebrew at a screen (`--open=<route>`). |
+| `source/bl_prefs.{h,c}` | `sd:/config/boreale/prefs.conf`, the look the homebrews share (language, theme, text size, effects, density): each follows it by default and may keep its own. |
 | `source/bl_cache.{h,c}` | `sd:/config/boreale/cache/`, the games' icons and names read from the console, shared by the homebrews: one rule for emptying it (the console language changed, the icons over their bounds). |
 | `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases). |
 
@@ -132,6 +133,16 @@ over 512 KB, empties it, and the homebrews read again what they need. The
 files are written aside and renamed; `cache.conf` and `names.txt` follow the
 `schema` rule (a newer one leaves the cache alone). The agent sysmodule
 streams an icon from `bl_cache_icon_path()`.
+
+## The shared look
+
+`sd:/config/boreale/prefs.conf` (`bl_prefs`) holds the look the homebrews
+share: the language, the theme, the text size, the effects and the density,
+in the homebrews' own words (Aurore's Cadran), each key only once one of
+them has set it. Each homebrew follows a shared value by default and may
+keep one of its own instead (its own settings say which); whichever changes
+a shared value writes it here, and the others take it when they next start.
+A `bl_kv` file with a `schema`, like `link.conf`.
 
 ## Tests
 
