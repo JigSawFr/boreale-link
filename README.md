@@ -22,6 +22,7 @@ of them; this code comes from its `source/link/`.
 | `source/bl_tls.{h,c}` | The stream over TLS through the console's `ssl` service, with an optional private certificate authority. Switch only. |
 | `source/bl_json.{h,c}` | A JSON writer into a fixed buffer. |
 | `source/bl_kv.{h,c}` | The flat files' reader: `key=value`, one per line, `#` comments; their `schema` and the round trip of the keys a version does not know. |
+| `source/bl_link_conf.{h,c}` | `sd:/config/boreale/link.conf`, the broker's settings every homebrew of the console shares: host, port, TLS, MQTT version, credentials, the console's id and name, the topic and discovery prefixes. |
 
 ## Using it
 
@@ -67,6 +68,21 @@ it). `bl_kv` gives each homebrew the same rule:
 
 `bl_kv.h` has the whole pattern, in a few lines.
 
+## The shared broker settings
+
+`sd:/config/boreale/link.conf` (`bl_link_conf`) holds what every homebrew
+needs to reach the broker and to say which console it is: the broker's
+host and port, TLS and its certificate authority (`config/boreale/ca.pem`
+by convention), the MQTT version, the credentials (or `allow_anonymous`),
+the console's id (8 lower-case hex digits, made once) and name, and the
+topic and discovery prefixes (`boreale`, `homeassistant`). It is set once,
+from the screen of the homebrew that offers one (PlayGuard's *Remote
+access*), and read by the others and their sysmodules; each homebrew keeps
+its own keys (what it publishes, how it takes orders) in its own file.
+Being a `bl_kv` file with a `schema`, a homebrew of another version keeps
+the keys it does not know when it writes it, and never writes over a file
+of a newer schema.
+
 ## Tests
 
 ```sh
@@ -74,7 +90,8 @@ make test          # the host tests, with the address and undefined-behaviour sa
 ```
 
 `tests/codec` covers the JSON writer, the MQTT codec, the topic filters and
-the `key=value` reader with its schema and round trip; `tests/session` runs the session against a fake broker
+the `key=value` reader with its schema and round trip; `tests/link_conf` the
+shared broker settings; `tests/session` runs the session against a fake broker
 kept in memory, with a scripted clock. CI runs them under gcc and clang, and
 builds every source for the Switch in devkitPro's image.
 
