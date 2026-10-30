@@ -2,6 +2,7 @@
 // console language changes or the icons are over their bounds, a newer
 // schema left alone, the keys this version does not know kept.
 // Copyright (C) 2026 JigSawFr.  GPLv3-or-later (see LICENSE).
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,13 +19,23 @@ static void path_of(const char *rel, char *out, size_t cap)
     snprintf(out, cap, "%s/%s", root, rel);
 }
 
+// A file written by the test, readable by all and writable by its owner.
+static FILE *create(const char *path)
+{
+    const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return NULL;
+    FILE *f = fdopen(fd, "wb");
+    if (!f) close(fd);
+    return f;
+}
+
 static void put(const char *rel, const char *text)
 {
     char path[256], cmd[300];
     path_of(rel, path, sizeof(path));
     snprintf(cmd, sizeof(cmd), "mkdir -p \"$(dirname '%s')\"", path);
     REQUIRE(system(cmd) == 0);
-    FILE *f = fopen(path, "wb");
+    FILE *f = create(path);
     REQUIRE(f != NULL);
     fputs(text, f);
     fclose(f);
@@ -163,7 +174,7 @@ static void test_bounds(void)
     // names.txt grown past its bound: started again with the icons.
     char path[256];
     path_of("config/boreale/cache/names.txt", path, sizeof(path));
-    FILE *f = fopen(path, "wb");
+    FILE *f = create(path);
     REQUIRE(f != NULL);
     fputs("schema=1\n", f);
     for (int i = 0; i < 40000; i++) fprintf(f, "%016X=Some made-up game\n", i);
