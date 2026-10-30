@@ -25,6 +25,7 @@ of them; this code comes from its `source/link/`.
 | `source/bl_link_conf.{h,c}` | `sd:/config/boreale/link.conf`, the broker's settings every homebrew of the console shares: host, port, TLS, MQTT version, credentials, the console's id and name, the topic and discovery prefixes. |
 | `source/bl_jread.{h,c}` | A JSON reader without allocation: the text cut into tokens kept in the caller's array, strings unescaped, the members a version does not know copied as written. |
 | `source/bl_notices.{h,c}` | `sd:/config/boreale/notices/<module>.json`, the shared bell: each homebrew's notices (to do, going on, failed, for information), already written in the console's language, each with a route that opens its homebrew at a screen (`--open=<route>`). |
+| `source/bl_updates.{h,c}` | `sd:/config/boreale/updates.conf`, the newest release of each homebrew as the last update check found it: one homebrew checks for all, at most once a day. |
 | `source/bl_prefs.{h,c}` | `sd:/config/boreale/prefs.conf`, the look the homebrews share (language, theme, text size, effects, density): each follows it by default and may keep its own. |
 | `source/bl_cache.{h,c}` | `sd:/config/boreale/cache/`, the games' icons and names read from the console, shared by the homebrews: one rule for emptying it (the console language changed, the icons over their bounds). |
 | `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases). |
@@ -144,6 +145,15 @@ keep one of its own instead (its own settings say which); whichever changes
 a shared value writes it here, and the others take it when they next start.
 A `bl_kv` file with a `schema`, like `link.conf`.
 
+## The update check made for all
+
+`sd:/config/boreale/updates.conf` (`bl_updates`) keeps the newest release
+of each homebrew installed (`latest.<module>=<version>`) and when the check
+ran (`checked`). The homebrew that checks for its own update checks for the
+others too, from the registry's `repo` of each, at most once a day
+(`bl_updates_due()`); the others read the file to show an update, their own
+or another's, without asking the network. A `bl_kv` file with a `schema`.
+
 ## Tests
 
 ```sh
@@ -154,10 +164,10 @@ make test          # the host tests, with the address and undefined-behaviour sa
 the `key=value` reader with its schema and round trip; `tests/link_conf` the
 shared broker settings; `tests/app` the registry's files; `tests/cache` the
 shared cache of icons and names; `tests/prefs` the shared look;
-`tests/notices` the JSON reader and the shared bell's files; `tests/session`
-runs the session against a fake broker kept in memory, with a scripted
-clock. CI runs them under gcc and clang, and builds every source for the
-Switch in devkitPro's image.
+`tests/updates` the update check's file; `tests/notices` the JSON reader and
+the shared bell's files; `tests/session` runs the session against a fake
+broker kept in memory, with a scripted clock. CI runs them under gcc and
+clang, and builds every source for the Switch in devkitPro's image.
 
 ## License
 
