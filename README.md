@@ -23,6 +23,8 @@ of them; this code comes from its `source/link/`.
 | `source/bl_json.{h,c}` | A JSON writer into a fixed buffer. |
 | `source/bl_kv.{h,c}` | The flat files' reader: `key=value`, one per line, `#` comments; their `schema` and the round trip of the keys a version does not know. |
 | `source/bl_link_conf.{h,c}` | `sd:/config/boreale/link.conf`, the broker's settings every homebrew of the console shares: host, port, TLS, MQTT version, credentials, the console's id and name, the topic and discovery prefixes. |
+| `source/bl_jread.{h,c}` | A JSON reader without allocation: the text cut into tokens kept in the caller's array, strings unescaped, the members a version does not know copied as written. |
+| `source/bl_notices.{h,c}` | `sd:/config/boreale/notices/<module>.json`, the shared bell: each homebrew's notices (to do, going on, failed, for information), already written in the console's language, each with a route that opens its homebrew at a screen (`--open=<route>`). |
 | `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases). |
 
 ## Using it
@@ -97,6 +99,26 @@ shared bell's sections, a screen that lists and launches them, the update
 check made for all of them. A `bl_kv` file with a `schema`, like
 `link.conf`.
 
+## The shared bell
+
+Each homebrew (or its sysmodule) writes its notices to
+`sd:/config/boreale/notices/<module>.json` (`bl_notices`) and reads the
+others', so that its bell shows its own first, then a section per other
+homebrew. A notice has an id, a level (`todo`, `progress`, `error`,
+`info`), a title and a detail already written in the console's language
+(with that language: one in another is not shown until its homebrew writes
+it again), an optional progress, when it was updated and when it expires,
+and a route. A click on another homebrew's notice starts it with
+`envSetNextLoad()` and the arguments `bl_open_args()` makes
+(`sdmc:/<nro> --open=<route>`); each homebrew reads its route with
+`bl_open_route()` at start-up, and an unknown route opens its home. A
+notice carries no action, only where to go: nothing of one homebrew runs in
+another. A progress is written again every 5 % or every 30 s
+(`bl_notice_progress_due()`), to spare the SD card. The file follows the
+`schema` rule of the shared files, the members a version does not know
+included (`bl_jread`, a JSON reader without allocation, copies them as
+written).
+
 ## Tests
 
 ```sh
@@ -105,7 +127,8 @@ make test          # the host tests, with the address and undefined-behaviour sa
 
 `tests/codec` covers the JSON writer, the MQTT codec, the topic filters and
 the `key=value` reader with its schema and round trip; `tests/link_conf` the
-shared broker settings; `tests/app` the registry's files; `tests/session` runs the session against a fake broker
+shared broker settings; `tests/app` the registry's files;
+`tests/notices` the JSON reader and the shared bell's files; `tests/session` runs the session against a fake broker
 kept in memory, with a scripted clock. CI runs them under gcc and clang, and
 builds every source for the Switch in devkitPro's image.
 
