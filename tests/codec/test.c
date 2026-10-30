@@ -414,6 +414,96 @@ static void test_kv(void)
     CHECK(!bl_parse_bool("maybe", &b) && !b);
 }
 
+// ------------------------------------------------- key=value, round trip
+
+// A homebrew's file of schema 1: two keys it knows, the others kept.
+typedef struct {
+    BlKvFile *f;
+    char      volume[8];
+    char      theme[16];
+} Prefs;
+
+static void on_prefs(void *ctx, const char *key, const char *value)
+{
+    Prefs *p = (Prefs *)ctx;
+    if (!strcmp(key, "volume")) snprintf(p->volume, sizeof(p->volume), "%s", value);
+    else if (!strcmp(key, "theme")) snprintf(p->theme, sizeof(p->theme), "%s", value);
+    else bl_kv_keep(p->f, key, value);
+}
+
+static size_t write_prefs(const BlKvFile *f, const Prefs *p, char *out, size_t cap)
+{
+    const int n = snprintf(out, cap, "schema=1\nvolume=%s\ntheme=%s\n", p->volume, p->theme);
+    if (n < 0 || (size_t)n >= cap) return 0;
+    return bl_kv_write_kept(f, out, cap, (size_t)n);
+}
+
+static void test_kv_schema(void)
+{
+    char kept[64], out[256];
+    BlKvFile f;
+    Prefs p;
+
+    // Absent: 1, and the schema line is not handed over
+    CHECK(bl_kv_schema("volume=3\n", 9) == BL_KV_SCHEMA_ABSENT);
+    CHECK(bl_kv_schema("", 0) == 1);
+    CHECK(bl_kv_schema("schema= 2 \n", 11) == 2);
+    CHECK(bl_kv_schema("schema=1\nschema=4\n", 18) == 4);
+    static const char *const bad[] = { "two", "0", "-1", "1.5", "", "99999999999", "2 3" };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        char line[40];
+        const int n = snprintf(line, sizeof(line), "schema=%s\n", bad[i]);
+        CHECK(bl_kv_schema(line, (size_t)n) == 0);
+    }
+
+    // Unknown keys come back after the caller's own, as read
+    const char *mine = "# Prefs\nvolume=3\nsparkle= on\ntheme=moss\ncolour=#3ddc97\n";
+    memset(&p, 0, sizeof(p));
+    p.f = &f;
+    bl_kv_file_init(&f, kept, sizeof(kept));
+    bl_kv_read(&f, mine, strlen(mine), on_prefs, &p);
+    CHECK(f.schema == 1 && f.skipped == 0 && !f.overflow);
+    CHECK(!strcmp(p.volume, "3") && !strcmp(p.theme, "moss"));
+    CHECK(!strcmp(kept, "sparkle= on\ncolour=#3ddc97\n"));
+    CHECK(bl_kv_may_rewrite(&f, 1));
+    snprintf(p.volume, sizeof(p.volume), "5");
+    size_t n = write_prefs(&f, &p, out, sizeof(out));
+    CHECK(n == strlen(out) && !strcmp(out, "schema=1\nvolume=5\ntheme=moss\nsparkle= on\ncolour=#3ddc97\n"));
+    // Read again, it gives the same (the schema line is the writer's, once)
+    Prefs again;
+    memset(&again, 0, sizeof(again));
+    again.f = &f;
+    bl_kv_read(&f, out, n, on_prefs, &again);
+    CHECK(!strcmp(again.volume, "5") && !strcmp(kept, "sparkle= on\ncolour=#3ddc97\n"));
+    CHECK(write_prefs(&f, &again, out, sizeof(out)) == n);
+    // Too small for what is kept: nothing written
+    CHECK(write_prefs(&f, &again, out, n) == 0);
+
+    // Newer: read for what is known, never written over
+    const char *newer = "schema=2\nvolume=4\nshape=round\n";
+    memset(&p, 0, sizeof(p));
+    p.f = &f;
+    bl_kv_read(&f, newer, strlen(newer), on_prefs, &p);
+    CHECK(f.schema == 2 && !strcmp(p.volume, "4"));
+    CHECK(!bl_kv_may_rewrite(&f, 1) && bl_kv_may_rewrite(&f, 2));
+    bl_kv_read(&f, "schema=soon\n", 12, on_prefs, &p);
+    CHECK(f.schema == 0 && !bl_kv_may_rewrite(&f, 1) && !bl_kv_may_rewrite(&f, 1000));
+    bl_kv_read(&f, "volume=4\n", 9, on_prefs, &p);
+    CHECK(f.schema == 1 && bl_kv_may_rewrite(&f, 1));
+
+    // A line skipped, or one to keep that does not fit: not written over
+    char longer[700];
+    memset(longer, 'v', sizeof(longer));
+    memcpy(longer, "note=", 5);
+    memcpy(longer + 600, "\nvolume=2\n", 11);
+    bl_kv_read(&f, longer, strlen(longer), on_prefs, &p);
+    CHECK(f.skipped == 1 && !strcmp(p.volume, "2") && !bl_kv_may_rewrite(&f, 1));
+    const char *many = "a=0123456789012345678901234567890123456789\nb=0123456789012345678901234567890123456789\n";
+    bl_kv_read(&f, many, strlen(many), on_prefs, &p);
+    CHECK(f.skipped == 0 && f.overflow && !bl_kv_may_rewrite(&f, 1));
+    CHECK(!strncmp(kept, "a=", 2) && f.len == strlen(kept));
+}
+
 int main(void)
 {
     test_json();
@@ -424,5 +514,6 @@ int main(void)
     test_mqtt5();
     test_topic_matching();
     test_kv();
+    test_kv_schema();
     return CHECK_DONE("codec: all tests passed");
 }

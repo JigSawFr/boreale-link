@@ -21,7 +21,7 @@ of them; this code comes from its `source/link/`.
 | `source/bl_net.{h,c}` | The plain TCP stream (POSIX sockets: libnx on the Switch, the host's elsewhere) and a monotonic clock. |
 | `source/bl_tls.{h,c}` | The stream over TLS through the console's `ssl` service, with an optional private certificate authority. Switch only. |
 | `source/bl_json.{h,c}` | A JSON writer into a fixed buffer. |
-| `source/bl_kv.{h,c}` | The flat files' reader: `key=value`, one per line, `#` comments. |
+| `source/bl_kv.{h,c}` | The flat files' reader: `key=value`, one per line, `#` comments; their `schema` and the round trip of the keys a version does not know. |
 
 ## Using it
 
@@ -42,6 +42,31 @@ if (bl_session_check(&s)) bl_session_poll(&s, wait_ms);
 The session calls back to subscribe once connected, and hands every message
 the subscriptions bring to the caller's `on_message`.
 
+## The `key=value` files
+
+A file that several versions of a homebrew read and write (its settings,
+`config/boreale/`'s shared files) says its format in a `schema=N` line, a
+whole number that goes up when a key changes meaning (a key added keeps
+it). `bl_kv` gives each homebrew the same rule:
+
+- `bl_kv_schema()`, or `BlKvFile.schema` after `bl_kv_read()`: the file's
+  schema, `1` without the line (the files written before it), `0` when it
+  is not a number.
+- A file of a newer schema is read for the keys the homebrew knows, and
+  never written over: `bl_kv_may_rewrite(&f, MY_SCHEMA)` is false. The
+  homebrew works with what it read, in memory.
+- Rewriting keeps the keys the homebrew does not know: its callback hands
+  them to `bl_kv_keep()`, which copies them into a buffer the caller gives,
+  and `bl_kv_write_kept()` appends them, as read, after the caller's own
+  keys.
+- A line the reader cannot take (a key of 48 bytes or more, a value of 512
+  or more) is skipped, and counted: `bl_kv_each()` returns the count,
+  `BlKvFile.skipped` keeps it. A file with a line skipped, or with more
+  unknown keys than the buffer holds (`BlKvFile.overflow`), is not written
+  over either: writing it would lose them.
+
+`bl_kv.h` has the whole pattern, in a few lines.
+
 ## Tests
 
 ```sh
@@ -49,7 +74,7 @@ make test          # the host tests, with the address and undefined-behaviour sa
 ```
 
 `tests/codec` covers the JSON writer, the MQTT codec, the topic filters and
-the `key=value` reader; `tests/session` runs the session against a fake broker
+the `key=value` reader with its schema and round trip; `tests/session` runs the session against a fake broker
 kept in memory, with a scripted clock. CI runs them under gcc and clang, and
 builds every source for the Switch in devkitPro's image.
 
