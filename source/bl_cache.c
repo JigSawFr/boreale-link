@@ -93,6 +93,17 @@ static bool icon_file(const char *name, const char *ext, uint64_t *id)
     return true;
 }
 
+// A file's size, -1 when there is none: measured on the file opened, not
+// by its name before something else is done to it.
+static long file_size(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    const long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
+    fclose(f);
+    return size;
+}
+
 // Counts the icons (and removes the files cut by a crash), or removes them
 // all: how many it removed.
 static uint32_t scan_once(BlCache *c, const char *dir, bool remove_all)
@@ -111,11 +122,11 @@ static uint32_t scan_once(BlCache *c, const char *dir, bool remove_all)
         memcpy(path, dir, dl);
         path[dl] = '/';
         memcpy(path + dl + 1, e->d_name, nl + 1);
-        struct stat st;
+        long size;
         if (remove_all || !icon) {
             if (remove(path) == 0) removed++;
-        } else if (stat(path, &st) == 0) {
-            c->bytes += (uint64_t)st.st_size;
+        } else if ((size = file_size(path)) >= 0) {
+            c->bytes += (uint64_t)size;
             c->files++;
         }
     }
@@ -142,11 +153,6 @@ static void on_conf(void *ctx, const char *key, const char *value)
     else bl_kv_keep(r->file, key, value);
 }
 
-static long file_size(const char *path)
-{
-    struct stat st;
-    return stat(path, &st) == 0 ? (long)st.st_size : -1;
-}
 
 bool bl_cache_open(BlCache *c, const char *root, uint8_t lang)
 {
