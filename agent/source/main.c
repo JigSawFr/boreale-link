@@ -1376,6 +1376,7 @@ int main(int argc, char **argv)
     mutexInit(&g_lock);
     agent_shared_init(&g_shared, AGENT_VERSION);
     agent_relay_init(&g_relay);
+    agent_relay_set_version(&g_relay, AGENT_VERSION);
     {
         char fw[16];
         sysinfo_version_string(hosversionGet(), fw, sizeof(fw));
@@ -1404,17 +1405,18 @@ int main(int argc, char **argv)
             reload(false);
         }
         mutexLock(&g_lock);
-        const bool shutdown = g_shared.want_shutdown;
+        // PlayGuard asked it (PrepareShutdown) or a manager did (bl:link's Shutdown).
+        const bool shutdown = g_shared.want_shutdown || agent_relay_leaving(&g_relay);
         const bool session = g_shared.app_session;
         mutexUnlock(&g_lock);
         if (shutdown && !g_stopped) {
             engine_stop();   // "offline", DISCONNECT
             g_stopped = true;
-            slog("stopped for PlayGuard%s%s", NULL, NULL);
+            slog("stopped: asked to leave the broker%s%s", NULL, NULL);
         } else if (!shutdown && g_stopped) {
             // PlayGuard said Hello again: the update or the stop did not happen.
             g_stopped = false;
-            slog("resumed for PlayGuard%s%s", NULL, NULL);
+            slog("resumed: back on the broker%s%s", NULL, NULL);
         }
         if (g_stopped || !g_conf_ok || !g_conf.enabled || sync_conf_problem(&g_conf)) {
             phase(PHASE_LINK);

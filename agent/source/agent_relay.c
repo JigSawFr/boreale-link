@@ -149,9 +149,41 @@ static uint32_t status(AgentRelay *r, AgentRelaySession *s, AgentCall *c)
     return 0;
 }
 
+void agent_relay_set_version(AgentRelay *r, const char *version)
+{
+    snprintf(r->version, sizeof(r->version), "%s", version ? version : "");
+}
+
+bool agent_relay_leaving(const AgentRelay *r)
+{
+    return r->leaving;
+}
+
+// Info: what an app that manages the agent asks before and after replacing it.
+static uint32_t info(const AgentRelay *r, AgentCall *c)
+{
+    if (c->out_cap < sizeof(BlRelayInfo)) return AGENT_RC_BAD_INPUT;
+    BlRelayInfo i;
+    memset(&i, 0, sizeof(i));
+    i.protocol = BL_RELAY_PROTOCOL;
+    snprintf(i.version, sizeof(i.version), "%s", r->version);
+    i.online = r->online ? 1 : 0;
+    i.leaving = r->leaving ? 1 : 0;
+    for (int n = 0; n < AGENT_RELAY_SESSIONS; n++) i.modules += r->sessions[n].open ? 1 : 0;
+    memcpy(c->out, &i, sizeof(i));
+    c->out_len = sizeof(i);
+    return 0;
+}
+
 uint32_t agent_relay_dispatch(AgentRelay *r, int *slot, uint32_t cmd, AgentCall *c)
 {
     if (cmd == BlRelayCmd_Hello) return hello(r, slot, c);
+    switch (cmd) {   // the control commands: no session needed
+    case BlRelayCmd_Info:     return info(r, c);
+    case BlRelayCmd_Shutdown: r->leaving = true; return 0;
+    case BlRelayCmd_Resume:   r->leaving = false; return 0;
+    default: break;
+    }
     AgentRelaySession *s = session_at(r, *slot);
     if (!s) return AGENT_RC_NO_SESSION;
     switch (cmd) {

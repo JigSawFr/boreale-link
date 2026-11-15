@@ -44,6 +44,17 @@ typedef struct {
 uint32_t bl_relay_pop_order(BlRelayInOrder *out, bool *got);
 uint32_t bl_relay_status(BlRelayStatus *out);
 
+// Managing the agent, on a session of their own (no module, no Hello): 0 or
+// the console's result code. An agent from before them answers an error of
+// the service (the command is unknown): it is too old, the caller says so.
+// `Info`: whether it answers, its version and protocol. `Shutdown`: it leaves
+// the broker (its last will says "offline") and stays away until `Resume` or
+// its own restart: ask before stopping or replacing it. Off the console they
+// fail (an error code, an empty `out`).
+uint32_t bl_relay_info(BlRelayInfo *out);
+uint32_t bl_relay_shutdown(void);
+uint32_t bl_relay_resume(void);
+
 #ifdef __cplusplus
 }
 #endif
