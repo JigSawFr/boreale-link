@@ -170,6 +170,15 @@ trailing `/`), and the bounded queue of orders kept for one session (full:
 the new order is refused and counted, none dropped). The relay moves bytes
 and adds no right to the agent. The IPC service itself lives in the agent.
 
+The client side is `bl_relay_nx` (Switch only; elsewhere it says the agent is
+not there). A homebrew asks `bl_relay_open(module, version, …)`: when it returns
+true the agent holds the broker connection and the homebrew publishes with
+`bl_relay_publish` and reads its orders with `bl_relay_pop_order`; when it
+returns false (no agent, another protocol, a module the agent refuses) the
+homebrew opens its own `BlSession` as before. The wire structures and the
+layout of the publish and order buffers are in `bl_relay.h`, the same text both
+sides compile.
+
 ## Tests
 
 ```sh

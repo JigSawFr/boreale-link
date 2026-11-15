@@ -15,6 +15,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bl_app.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,6 +39,63 @@ typedef enum {
     BlRelayCmd_Status   = 3,   // out: online, orders waiting, publishes refused
     BlRelayCmd_Close    = 4,   // the session ends (a crash ends it as well)
 } BlRelayCmd;
+
+// The structures the two sides exchange (the same compiler, the same ABI:
+// aarch64), checked at build time: a change to any of them raises
+// BL_RELAY_PROTOCOL and its size is written here.
+#define BL_RELAY_VERSION_MAX 24
+#define BL_RELAY_ID_LEN      8      // the console's id: 8 lower-case hex digits
+#define BL_RELAY_SIZE_HELLO       64
+#define BL_RELAY_SIZE_HELLO_REPLY 16
+#define BL_RELAY_SIZE_STATUS      8
+
+// Hello, in. The agent reads `protocol` from a Hello of any size.
+typedef struct {
+    uint32_t protocol;
+    char     module[BL_APP_MODULE_MAX];
+    char     version[BL_RELAY_VERSION_MAX];   // the homebrew's
+    uint8_t  pad[3];
+} BlRelayHello;
+
+// Hello, out. Always answered with success: `accepted` says whether the
+// session opened (another protocol, a module that may not relay, one already
+// open, or no room: 0, and the homebrew keeps its own connection).
+typedef struct {
+    uint32_t protocol;
+    char     console_id[BL_RELAY_ID_LEN + 1];
+    uint8_t  online;
+    uint8_t  accepted;
+    uint8_t  pad[1];
+} BlRelayHelloReply;
+
+typedef struct {
+    uint32_t refused;      // orders refused, the queue being full
+    uint8_t  online;
+    uint8_t  orders;       // waiting for the homebrew
+    uint8_t  outbox;       // publications waiting for the agent's loop
+    uint8_t  pad;
+} BlRelayStatus;
+
+#ifdef __cplusplus
+#define BL_RELAY_SIZE_CHECK(type, size) static_assert(sizeof(type) == (size), #type ": bump BL_RELAY_PROTOCOL")
+#else
+#define BL_RELAY_SIZE_CHECK(type, size) _Static_assert(sizeof(type) == (size), #type ": bump BL_RELAY_PROTOCOL")
+#endif
+BL_RELAY_SIZE_CHECK(BlRelayHello, BL_RELAY_SIZE_HELLO);
+BL_RELAY_SIZE_CHECK(BlRelayHelloReply, BL_RELAY_SIZE_HELLO_REPLY);
+BL_RELAY_SIZE_CHECK(BlRelayStatus, BL_RELAY_SIZE_STATUS);
+#undef BL_RELAY_SIZE_CHECK
+
+// The buffers of Publish (in) and PopOrder (out): a flags byte (bit 0:
+// retained), the topic below the module's level, a NUL, then the payload.
+// `bl_relay_encode_publish` writes one (0: refused, the topic or the payload
+// does not fit); `bl_relay_decode_order` reads one the agent handed back,
+// pointing into `buf` (false: malformed, the topic not terminated or not
+// allowed).
+size_t bl_relay_encode_publish(const char *sub, const void *payload, size_t len, bool retained, void *out,
+                               size_t cap);
+bool   bl_relay_decode_order(const void *buf, size_t len, const char **sub, const void **payload, size_t *payload_len,
+                             bool *retained);
 
 // Whether `module` may open a relay session: a valid registry name that is
 // not one of the levels of the console itself (`availability`, `system`, …),
