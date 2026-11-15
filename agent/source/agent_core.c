@@ -271,7 +271,7 @@ static void nro_kv(void *ctx, const char *key, const char *value)
     } else if (!strcmp(key, "serial")) {
         // Letters and digits only (a serial number): anything else is not one.
         size_t i = 0;
-        for (; value[i] && i < sizeof(n->serial) - 1; i++)
+        for (; i < sizeof(n->serial) - 1 && value[i]; i++)
             if (!isalnum((unsigned char)value[i])) break;
         if (value[i] == '\0' && i > 0) snprintf(n->serial, sizeof(n->serial), "%s", value);
     }
