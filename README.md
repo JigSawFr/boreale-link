@@ -32,6 +32,8 @@ of them; this code comes from its `source/link/`.
 | `source/bl_updates.{h,c}` | `sd:/config/boreale/updates.conf`, the newest release of each homebrew as the last update check found it: one homebrew checks for all, at most once a day. |
 | `source/bl_prefs.{h,c}` | `sd:/config/boreale/prefs.conf`, the look the homebrews share (language, theme, text size, effects, density): each follows it by default and may keep its own. |
 | `source/bl_cache.{h,c}` | `sd:/config/boreale/cache/`, the games' icons and names read from the console, shared by the homebrews: one rule for emptying it (the console language changed, the icons over their bounds). |
+| `agent/` | The shared agent sysmodule: the remote link's background process (`bl:link` relay, `pg:agent`), built from inside an app (it needs boreale-kit's `source/core` next to this library). See `agent/README.md`. |
+| `modules/playguard/` | PlayGuard's module of the agent, and the C service layer PlayGuard's app shares with it: `core/` (parental controls, play time and log, recovery marker), `sync/` (the remote link's documents, orders and discovery), `util/` (the play log). Not part of the library: only an app that carries PlayGuard's module builds it. |
 | `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases, `publish`). The file is also what unlocks the homebrew's module in the agent (`bl_app_unlocks()`). |
 
 ## Using it
