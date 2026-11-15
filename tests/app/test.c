@@ -99,11 +99,43 @@ static void test_newer_schema(void)
     CHECK(!a.read && bl_app_may_write(&a));
 }
 
+// What unlocks the homebrew's module in the agent.
+static void test_unlocks(void)
+{
+    BlApp a;
+    bl_app_defaults(&a);
+    CHECK(!bl_app_unlocks(&a) && !bl_app_unlocks(NULL));   // nothing read
+    const char off[] = "schema=1\nname=PlayShelf\nnro=switch/PlayShelf/PlayShelf.nro\n";
+    bl_app_parse(&a, off, strlen(off));
+    CHECK(a.read && !a.publish && !bl_app_unlocks(&a));     // a file written before the key: not published
+    const char on[] = "schema=1\nnro=switch/PlayShelf/PlayShelf.nro\npublish=1\nfuture_key=1\n";
+    bl_app_defaults(&a);
+    bl_app_parse(&a, on, strlen(on));
+    CHECK(a.publish && bl_app_unlocks(&a));                 // an unknown key changes nothing
+    char out[1024];
+    CHECK(bl_app_write(&a, out, sizeof(out)) && contains(out, "publish=1\n"));
+    const char junk[] = "publish=yes\n";                    // not a value: what was there stays
+    bl_app_parse(&a, junk, strlen(junk));
+    CHECK(a.publish);
+    const char zero[] = "publish=0\n";
+    bl_app_parse(&a, zero, strlen(zero));
+    CHECK(!a.publish && !bl_app_unlocks(&a));
+    const char no_nro[] = "schema=1\npublish=1\n";
+    bl_app_defaults(&a);
+    bl_app_parse(&a, no_nro, strlen(no_nro));
+    CHECK(!bl_app_unlocks(&a));                             // no .nro to check on the SD card
+    const char newer[] = "schema=2\nnro=switch/PlayShelf/PlayShelf.nro\npublish=1\n";
+    bl_app_defaults(&a);
+    bl_app_parse(&a, newer, strlen(newer));
+    CHECK(a.publish && !bl_app_unlocks(&a));                // a newer schema: as if absent
+}
+
 int main(void)
 {
     test_names();
     test_round_trip();
     test_bad_values();
     test_newer_schema();
+    test_unlocks();
     return CHECK_DONE("app: all tests passed");
 }

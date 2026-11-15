@@ -15,6 +15,8 @@
 //     if (bl_app_may_write(&a) && (n = bl_app_write(&a, out, sizeof(out))) && (n != len || memcmp(out, text, n)))
 //         save(path, out, n);   // only when something changed: the SD card is not written at each start
 //
+// The file is also what unlocks a module in the agent: bl_app_unlocks().
+//
 // Reading the registry: list BL_APPS_DIR, bl_app_module_of() on each name,
 // then read and parse the file.
 // Copyright (C) 2026 JigSawFr.  GPLv3-or-later (see LICENSE).
@@ -51,6 +53,7 @@ typedef struct {
     char     nro[BL_APP_PATH_MAX];         // under the SD card's root: "switch/PlayGuard/PlayGuard.nro"
     char     icon[BL_APP_PATH_MAX];        // a JPEG under the SD card's root, "" the .nro's own
     char     repo[BL_APP_REPO_MAX];        // where its releases are: "JigSawFr/PlayGuard"
+    bool     publish;                      // the homebrew's setting: the agent may publish its module (absent: no)
     bool     read;                         // the file had at least one line read
     BlKvFile file;                         // its schema, what it skipped, the lines kept
     char     kept[BL_APP_KEPT_MAX];
@@ -78,6 +81,13 @@ bool bl_app_may_write(const BlApp *a);
 // The file's content, the keys kept after its own; the length written, 0
 // when `cap` is too small.
 size_t bl_app_write(const BlApp *a, char *out, size_t cap);
+
+// Whether this file lets the agent carry the homebrew's module (run what it
+// has for it, relay it, announce it): the file was read, is of a schema this
+// version knows, names the homebrew's .nro and has `publish=1`. Whether that
+// .nro is still on the SD card (a homebrew removed leaves its file) is the
+// caller's to check.
+bool bl_app_unlocks(const BlApp *a);
 
 #ifdef __cplusplus
 }
