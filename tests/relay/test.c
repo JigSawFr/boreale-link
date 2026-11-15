@@ -134,7 +134,7 @@ static void test_codec(void)
 
 static void test_wire_sizes(void)
 {
-    CHECK(sizeof(BlRelayHello) == 64 && sizeof(BlRelayHelloReply) == 16 && sizeof(BlRelayStatus) == 8);
+    CHECK(sizeof(BlRelayHello) == 64 && sizeof(BlRelayHelloReply) == 16 && sizeof(BlRelayStatus) == 8 && sizeof(BlRelayInfo) == 32);
     CHECK(sizeof(((BlRelayHello *)0)->module) == BL_APP_MODULE_MAX);
 }
 
@@ -152,6 +152,10 @@ static void test_no_agent(void)
     CHECK(bl_relay_pop_order(&in, &got) != 0 && !got);
     BlRelayStatus st;
     CHECK(bl_relay_status(&st) != 0);
+    BlRelayInfo info;
+    memset(&info, 0xAA, sizeof(info));
+    CHECK(bl_relay_info(&info) != 0 && info.protocol == 0 && !info.online && !info.leaving);   // no agent
+    CHECK(bl_relay_shutdown() != 0 && bl_relay_resume() != 0);
     bl_relay_close();   // nothing open: nothing happens
 }
 

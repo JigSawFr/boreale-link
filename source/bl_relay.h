@@ -38,6 +38,11 @@ typedef enum {
     BlRelayCmd_PopOrder = 2,   // out buffer: the sub topic and payload of one order (empty: none)
     BlRelayCmd_Status   = 3,   // out: online, orders waiting, publishes refused
     BlRelayCmd_Close    = 4,   // the session ends (a crash ends it as well)
+    // Control: asked of the agent itself, on a session that said no Hello (an agent
+    // from before them answers AGENT_RC_UNKNOWN_CMD: it is too old).
+    BlRelayCmd_Info     = 5,   // out: the agent's protocol and version, whether it is online or leaving
+    BlRelayCmd_Shutdown = 6,   // leave the broker ("offline" said) and stay away: a manager is about to stop or replace it
+    BlRelayCmd_Resume   = 7,   // come back: the update did not happen, or is done (a restart comes back by itself)
 } BlRelayCmd;
 
 // The structures the two sides exchange (the same compiler, the same ABI:
@@ -48,6 +53,7 @@ typedef enum {
 #define BL_RELAY_SIZE_HELLO       64
 #define BL_RELAY_SIZE_HELLO_REPLY 16
 #define BL_RELAY_SIZE_STATUS      8
+#define BL_RELAY_SIZE_INFO        32
 
 // Hello, in. The agent reads `protocol` from a Hello of any size.
 typedef struct {
@@ -76,6 +82,17 @@ typedef struct {
     uint8_t  pad;
 } BlRelayStatus;
 
+// Info, out: what an app that manages the agent (installs, updates, stops it)
+// asks before and after: does it answer, which version, which protocol.
+typedef struct {
+    uint32_t protocol;                          // BL_RELAY_PROTOCOL of the agent
+    char     version[BL_RELAY_VERSION_MAX];     // the agent's own
+    uint8_t  online;                            // its broker connection is up
+    uint8_t  leaving;                           // Shutdown was asked and not undone
+    uint8_t  modules;                           // homebrews with a session open
+    uint8_t  pad;
+} BlRelayInfo;
+
 #ifdef __cplusplus
 #define BL_RELAY_SIZE_CHECK(type, size) static_assert(sizeof(type) == (size), #type ": bump BL_RELAY_PROTOCOL")
 #else
@@ -84,6 +101,7 @@ typedef struct {
 BL_RELAY_SIZE_CHECK(BlRelayHello, BL_RELAY_SIZE_HELLO);
 BL_RELAY_SIZE_CHECK(BlRelayHelloReply, BL_RELAY_SIZE_HELLO_REPLY);
 BL_RELAY_SIZE_CHECK(BlRelayStatus, BL_RELAY_SIZE_STATUS);
+BL_RELAY_SIZE_CHECK(BlRelayInfo, BL_RELAY_SIZE_INFO);
 #undef BL_RELAY_SIZE_CHECK
 
 // The buffers of Publish (in) and PopOrder (out): a flags byte (bit 0:

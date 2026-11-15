@@ -47,17 +47,26 @@ typedef struct {
     AgentRelaySession sessions[AGENT_RELAY_SESSIONS];
     char              console_id[SYNC_ID_LEN + 1];
     bool              online;     // written by the main loop
+    bool              leaving;    // a manager asked it to leave the broker (BlRelayCmd_Shutdown), until Resume
+    char              version[BL_RELAY_VERSION_MAX];   // the agent's, for Info
 } AgentRelay;
 
 void agent_relay_init(AgentRelay *r);
 // The main loop: the console's id and whether the broker connection is up.
 void agent_relay_set_link(AgentRelay *r, const char *console_id, bool online);
 
+// The agent's own version, said by Info.
+void agent_relay_set_version(AgentRelay *r, const char *version);
+// Whether a manager asked the agent to leave the broker and has not undone it: the
+// main loop stays offline, as for PlayGuard's PrepareShutdown.
+bool agent_relay_leaving(const AgentRelay *r);
+
 // A bl:link request on session `*slot` (-1: none yet; Hello sets it). The
 // publication buffer is: one byte of flags (bit 0: retained), the topic
 // below the module's level, a NUL, then the payload; an order comes back in
 // the same shape, in the output buffer, with its length (0: none waiting) in
-// the reply as a u32. Returns 0 or an AGENT_RC_*.
+// the reply as a u32. The control commands (Info, Shutdown, Resume) need no
+// session: they work on a fresh one that said no Hello. Returns 0 or an AGENT_RC_*.
 uint32_t agent_relay_dispatch(AgentRelay *r, int *slot, uint32_t cmd, AgentCall *c);
 // The session ended (Close, exit or crash): its orders and publications go.
 void agent_relay_closed(AgentRelay *r, int slot);

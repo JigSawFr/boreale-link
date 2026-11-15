@@ -108,6 +108,44 @@ uint32_t bl_relay_status(BlRelayStatus *out)
     return checked(serviceDispatchOut(&s_srv, BlRelayCmd_Status, *out));
 }
 
+// A session for one control call: no module, no Hello.
+static Result control_open(Service *srv)
+{
+    if (!has_service(BL_RELAY_SERVICE)) return MAKERESULT(Module_Libnx, LibnxError_NotFound);
+    return smGetService(srv, BL_RELAY_SERVICE);
+}
+
+uint32_t bl_relay_info(BlRelayInfo *out)
+{
+    memset(out, 0, sizeof(*out));
+    Service srv;
+    Result rc = control_open(&srv);
+    if (R_FAILED(rc)) return rc;
+    rc = serviceDispatchOut(&srv, BlRelayCmd_Info, *out);
+    serviceClose(&srv);
+    return rc;
+}
+
+uint32_t bl_relay_shutdown(void)
+{
+    Service srv;
+    Result rc = control_open(&srv);
+    if (R_FAILED(rc)) return rc;
+    rc = serviceDispatch(&srv, BlRelayCmd_Shutdown);
+    serviceClose(&srv);
+    return rc;
+}
+
+uint32_t bl_relay_resume(void)
+{
+    Service srv;
+    Result rc = control_open(&srv);
+    if (R_FAILED(rc)) return rc;
+    rc = serviceDispatch(&srv, BlRelayCmd_Resume);
+    serviceClose(&srv);
+    return rc;
+}
+
 #else   // not the console: no agent
 
 bool bl_relay_available(void)
@@ -150,6 +188,22 @@ uint32_t bl_relay_pop_order(BlRelayInOrder *out, bool *got)
 uint32_t bl_relay_status(BlRelayStatus *out)
 {
     memset(out, 0, sizeof(*out));
+    return 1;
+}
+
+uint32_t bl_relay_info(BlRelayInfo *out)
+{
+    memset(out, 0, sizeof(*out));
+    return 1;
+}
+
+uint32_t bl_relay_shutdown(void)
+{
+    return 1;
+}
+
+uint32_t bl_relay_resume(void)
+{
     return 1;
 }
 
