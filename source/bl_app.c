@@ -59,6 +59,10 @@ static void on_kv(void *ctx, const char *key, const char *value)
     else if (!strcmp(key, "nro")) str_field(a->nro, sizeof(a->nro), value);
     else if (!strcmp(key, "icon")) str_field(a->icon, sizeof(a->icon), value);
     else if (!strcmp(key, "repo")) str_field(a->repo, sizeof(a->repo), value);
+    else if (!strcmp(key, "publish")) {
+        if (!strcmp(value, "1")) a->publish = true;
+        else if (!strcmp(value, "0")) a->publish = false;   // anything else: what was there stays
+    }
     else bl_kv_keep(&a->file, key, value);
 }
 
@@ -73,6 +77,11 @@ bool bl_app_may_write(const BlApp *a)
     return bl_kv_may_rewrite(&a->file, BL_APP_SCHEMA);
 }
 
+bool bl_app_unlocks(const BlApp *a)
+{
+    return a && a->read && a->publish && a->nro[0] && a->file.schema >= 1 && a->file.schema <= BL_APP_SCHEMA;
+}
+
 size_t bl_app_write(const BlApp *a, char *out, size_t cap)
 {
     const int n = snprintf(out, cap,
@@ -83,8 +92,9 @@ size_t bl_app_write(const BlApp *a, char *out, size_t cap)
         "version=%s\n"
         "nro=%s\n"
         "icon=%s\n"
-        "repo=%s\n",
-        (unsigned)BL_APP_SCHEMA, a->name, a->version, a->nro, a->icon, a->repo);
+        "repo=%s\n"
+        "publish=%d\n",
+        (unsigned)BL_APP_SCHEMA, a->name, a->version, a->nro, a->icon, a->repo, a->publish ? 1 : 0);
     if (n < 0 || (size_t)n >= cap) return 0;
     BlKvFile kept = a->file;
     kept.kept = (char *)a->kept;   // this BlApp's lines, even copied from another one
