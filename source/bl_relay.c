@@ -91,3 +91,34 @@ bool bl_relay_queue_pop(BlRelayQueue *q, BlRelayOrder *out)
     q->count--;
     return true;
 }
+
+size_t bl_relay_encode_publish(const char *sub, const void *payload, size_t len, bool retained, void *out, size_t cap)
+{
+    if (!bl_relay_sub_ok(sub) || len > BL_RELAY_PAYLOAD_MAX || (len && !payload)) return 0;
+    const size_t sub_len = strlen(sub);
+    const size_t total = 1 + sub_len + 1 + len;
+    if (!out || total > cap) return 0;
+    uint8_t *b = (uint8_t *)out;
+    b[0] = retained ? 1 : 0;
+    memcpy(b + 1, sub, sub_len + 1);
+    if (len) memcpy(b + 1 + sub_len + 1, payload, len);
+    return total;
+}
+
+bool bl_relay_decode_order(const void *buf, size_t len, const char **sub, const void **payload, size_t *payload_len,
+                           bool *retained)
+{
+    if (!buf || len < 3) return false;
+    const char *b = (const char *)buf;
+    const char *s = b + 1;
+    const size_t max_sub = len - 1;
+    const size_t sub_len = strnlen(s, max_sub);
+    if (sub_len == max_sub || !bl_relay_sub_ok(s)) return false;   // no NUL, or a topic that is not allowed
+    const size_t n = len - 1 - sub_len - 1;
+    if (n > BL_RELAY_ORDER_MAX) return false;
+    if (sub) *sub = s;
+    if (payload) *payload = s + sub_len + 1;
+    if (payload_len) *payload_len = n;
+    if (retained) *retained = (b[0] & 1) != 0;
+    return true;
+}
