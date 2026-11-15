@@ -158,6 +158,18 @@ others too, from the registry's `repo` of each, at most once a day
 (`bl_updates_due()`); the others read the file to show an update, their own
 or another's, without asking the network. A `bl_kv` file with a `schema`.
 
+## The relay for an open homebrew
+
+While an agent holds the console's one broker connection, a homebrew that is
+open hands it its documents (service `bl:link`, protocol 1) instead of opening
+a second connection, and gets back the orders that came for it. `bl_relay`
+is the part both sides share: the constants, which module names may relay
+(not the console's own levels: `availability`, `system`, `icon`…), which
+topics a module may name below its level (no wildcard, no `..`, no leading or
+trailing `/`), and the bounded queue of orders kept for one session (full:
+the new order is refused and counted, none dropped). The relay moves bytes
+and adds no right to the agent. The IPC service itself lives in the agent.
+
 ## Tests
 
 ```sh
@@ -169,7 +181,8 @@ the `key=value` reader with its schema and round trip; `tests/link_conf` the
 shared broker settings; `tests/app` the registry's files; `tests/cache` the
 shared cache of icons and names; `tests/prefs` the shared look;
 `tests/updates` the update check's file; `tests/notices` the JSON reader and
-the shared bell's files; `tests/session` runs the session against a fake
+the shared bell's files; `tests/relay` the relay's module and topic rules and its
+queue of orders; `tests/session` runs the session against a fake
 broker kept in memory, with a scripted clock. CI runs them under gcc and
 clang, and builds every source for the Switch in devkitPro's image.
 
