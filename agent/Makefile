@@ -1,5 +1,5 @@
 # The shared agent — the remote link's background sysmodule (see source/main.c).
-# Produces out/playguard-agent.nsp, which an app's release zip places at
+# Produces out/boreale-link.nsp, which an app's release zip places at
 # atmosphere/contents/4200000000504741/exefs.nsp and which the apps bundle in
 # their romfs. It links PlayGuard's module (../modules/playguard: the C service
 # layer and the remote link's documents and orders), this library (../source) and
@@ -13,13 +13,13 @@
 
 # TOPDIR: this folder, in both passes (the second runs from build/).
 TOPDIR      ?= $(CURDIR)
-TARGET      := playguard-agent
+TARGET      := boreale-link
 LINK        := ..
 PG          := ../modules/playguard
 KIT         := ../../boreale-kit/source
 SOURCES     := source $(PG)/core $(PG)/sync $(PG)/util $(KIT)/core $(LINK)/source
 INCLUDES    := source $(KIT) $(KIT)/core $(PG) $(PG)/core $(PG)/sync $(LINK)/source
-APP_JSON    := $(TOPDIR)/playguard-agent.json
+APP_JSON    := $(TOPDIR)/boreale-link.json
 
 AGENT_VERSION ?= 0.0.0
 EXTRA_CFLAGS := -DAGENT_VERSION=\"$(AGENT_VERSION)\"

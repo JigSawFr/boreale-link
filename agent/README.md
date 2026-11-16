@@ -1,4 +1,4 @@
-# playguard-agent — the remote link in the background
+# boreale-link — the remote link in the background
 
 An optional Atmosphère sysmodule that keeps PlayGuard's remote link (MQTT,
 Home Assistant: [`docs/home-assistant.md`](https://github.com/JigSawFr/PlayGuard/blob/main/docs/home-assistant.md)) up
@@ -8,13 +8,13 @@ and carries out the orders Home Assistant sends, whatever is running.
 
 It is **optional**: PlayGuard carries a copy and installs it from *Console ›
 Optional modules*, which also starts it, stops it, updates it and removes it;
-it is also its own download (`playguard-agent.zip`, to extract at the SD-card
+it is also its own download (`boreale-link.zip`, to extract at the SD-card
 root). It does nothing until *Console › Remote access* is set up.
 
 When the agent on the SD card is not the one PlayGuard carries (another
 build, or another protocol of `pg:agent`), PlayGuard offers the update at
 start-up (*Later* skips that build). An update asks the agent to leave the
-broker (`PrepareShutdown`), stops it, keeps the previous `exefs.nsp` as
+broker (`bl:link`'s Shutdown), stops it, keeps the previous `exefs.nsp` as
 `exefs.nsp.bak`, starts the new one and waits up to 10 s for its `Hello`; when
 it does not answer, the new one is stopped and the previous one put back and
 started again (PlayGuard's `source/action/agent_update.cpp` on the kit's `sysmodule_flow`, host-tested in
@@ -25,7 +25,7 @@ boreale-kit's `tests/sysmodule_flow/`).
 - Connects to the broker set in `sd:/config/playguard/sync.conf` (the same
   settings as PlayGuard, same session engine: `modules/playguard/sync/sync_engine.c` on
   boreale-link's `bl_session.c`),
-  as the client `pg-<id>-agent`, with `offline` as its last will. `<id>` is
+  as the client `bl-<id>-link`, with `offline` as its last will. `<id>` is
   this system's: on an emuMMC it differs from the sysMMC's, so the two are
   two devices ([`docs/sync-protocol.md`](https://github.com/JigSawFr/PlayGuard/blob/main/docs/sync-protocol.md)).
 - Every `poll_s` seconds, reads the parental controls and the play timer
@@ -99,7 +99,7 @@ side by side (`library/boreale-link`, `library/boreale-kit`): the kit's
 `source/core` is part of it, and the library does not carry the kit.
 
 ```sh
-make -C library/boreale-link/agent AGENT_VERSION=1.2.0   # -> out/playguard-agent.nsp (needs devkitPro, DEVKITPRO set)
+make -C library/boreale-link/agent AGENT_VERSION=1.2.0   # -> out/boreale-link.nsp (needs devkitPro, DEVKITPRO set)
 ```
 
 PlayGuard's `make agent`, `make dist-agent` and `make` (the .nro with this module

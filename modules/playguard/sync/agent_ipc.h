@@ -72,7 +72,6 @@ typedef enum {
     AgentCmd_GetRecords      = 12,  // out AgentRecords
     AgentCmd_ReloadConfig    = 13,  // sync.conf and nro_state.txt changed
     AgentCmd_GetLog          = 14,  // out buffer: the last lines, oldest first, one per line
-    AgentCmd_PrepareShutdown = 15,  // "offline", disconnect: an update or a stop follows
     AgentCmd_PushGames       = 16,  // in buffer: the games document
 } AgentCmd;
 

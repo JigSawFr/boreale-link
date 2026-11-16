@@ -61,7 +61,7 @@ typedef struct {
     uint32_t     n_closed_ids;
 
     // Requests to the main loop.
-    bool want_sync_now, want_reload, want_shutdown;
+    bool want_sync_now, want_reload;
     bool session_changed;    // opened or closed since the main loop looked
     bool foreground_changed;
 } AgentShared;

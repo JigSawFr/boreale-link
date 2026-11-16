@@ -1,4 +1,4 @@
-// playguard-agent — keeps PlayGuard's remote link (MQTT, Home Assistant) up
+// boreale-link — keeps the console's remote link (MQTT, Home Assistant) up
 // while PlayGuard is closed: the same session engine as the app
 // (source/sync/sync_engine.c), the console read and changed through the same
 // service layer (source/core/), orders carried out through the same gate,
@@ -316,7 +316,7 @@ static bool          g_engine_on;
 static BlTcp         g_tcp;
 static BlTls         g_tls;
 static bool          g_sockets;
-static bool          g_stopped;   // PrepareShutdown: offline until the process ends
+static bool          g_stopped;   // asked to leave (bl:link's Shutdown): offline until Resume or the process ends
 
 static char     g_text[0x4000];          // files read
 static char     g_doc[AGENT_DOC_LARGE];  // documents taken from the shared state
@@ -816,7 +816,7 @@ static bool host_order(void *ctx, uint32_t id, const SyncIntent *intent, const c
 static size_t host_report(void *ctx, char *out, size_t cap)
 {
     (void)ctx;
-    int at = snprintf(out, cap, "=== PlayGuard agent report ===\nagent version: %s\nfirmware: %s\n\n", AGENT_VERSION,
+    int at = snprintf(out, cap, "=== Boreale Link report ===\nagent version: %s\nfirmware: %s\n\n", AGENT_VERSION,
                       g_firmware);
     if (at < 0 || (size_t)at >= cap) return 0;
     const char *was = phase("a report (time, pctl)");
@@ -1405,8 +1405,8 @@ int main(int argc, char **argv)
             reload(false);
         }
         mutexLock(&g_lock);
-        // PlayGuard asked it (PrepareShutdown) or a manager did (bl:link's Shutdown).
-        const bool shutdown = g_shared.want_shutdown || agent_relay_leaving(&g_relay);
+        // A manager asked it to leave (bl:link's Shutdown), for an update or a stop.
+        const bool shutdown = agent_relay_leaving(&g_relay);
         const bool session = g_shared.app_session;
         mutexUnlock(&g_lock);
         if (shutdown && !g_stopped) {
