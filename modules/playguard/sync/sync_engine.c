@@ -55,7 +55,11 @@ static void identity(SyncEngine *e)
     char id[SYNC_ID_LEN + 1];
     sync_conf_device_id(&e->conf, id);   // this system's: a sysMMC and an emuMMC are two devices
     snprintf(e->base, sizeof(e->base), "%s/%s", e->conf.topic_prefix, id);
-    snprintf(e->client_id, sizeof(e->client_id), "pg-%s-%s", id, e->source);
+    // The agent is the console's one connection, shared by every homebrew: its id carries no module's name.
+    if (e->source && !strcmp(e->source, "agent"))
+        snprintf(e->client_id, sizeof(e->client_id), "bl-%s-link", id);
+    else
+        snprintf(e->client_id, sizeof(e->client_id), "pg-%s-%s", id, e->source);
 }
 
 static BlSessionConf session_conf(const SyncEngine *e)

@@ -1,4 +1,4 @@
-// playguard-agent — keeps PlayGuard's remote link (MQTT, Home Assistant) up
+// boreale-link — keeps the console's remote link (MQTT, Home Assistant) up
 // while PlayGuard is closed: the same session engine as the app
 // (source/sync/sync_engine.c), the console read and changed through the same
 // service layer (source/core/), orders carried out through the same gate,
@@ -816,7 +816,7 @@ static bool host_order(void *ctx, uint32_t id, const SyncIntent *intent, const c
 static size_t host_report(void *ctx, char *out, size_t cap)
 {
     (void)ctx;
-    int at = snprintf(out, cap, "=== PlayGuard agent report ===\nagent version: %s\nfirmware: %s\n\n", AGENT_VERSION,
+    int at = snprintf(out, cap, "=== Boreale Link report ===\nagent version: %s\nfirmware: %s\n\n", AGENT_VERSION,
                       g_firmware);
     if (at < 0 || (size_t)at >= cap) return 0;
     const char *was = phase("a report (time, pctl)");
