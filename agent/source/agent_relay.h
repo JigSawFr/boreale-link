@@ -58,7 +58,7 @@ void agent_relay_set_link(AgentRelay *r, const char *console_id, bool online);
 // The agent's own version, said by Info.
 void agent_relay_set_version(AgentRelay *r, const char *version);
 // Whether a manager asked the agent to leave the broker and has not undone it: the
-// main loop stays offline, as for PlayGuard's PrepareShutdown.
+// main loop stays offline.
 bool agent_relay_leaving(const AgentRelay *r);
 
 // A bl:link request on session `*slot` (-1: none yet; Hello sets it). The

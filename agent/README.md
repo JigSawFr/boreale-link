@@ -14,7 +14,7 @@ root). It does nothing until *Console › Remote access* is set up.
 When the agent on the SD card is not the one PlayGuard carries (another
 build, or another protocol of `pg:agent`), PlayGuard offers the update at
 start-up (*Later* skips that build). An update asks the agent to leave the
-broker (`PrepareShutdown`), stops it, keeps the previous `exefs.nsp` as
+broker (`bl:link`'s Shutdown), stops it, keeps the previous `exefs.nsp` as
 `exefs.nsp.bak`, starts the new one and waits up to 10 s for its `Hello`; when
 it does not answer, the new one is stopped and the previous one put back and
 started again (PlayGuard's `source/action/agent_update.cpp` on the kit's `sysmodule_flow`, host-tested in

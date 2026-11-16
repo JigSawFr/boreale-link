@@ -316,7 +316,7 @@ static bool          g_engine_on;
 static BlTcp         g_tcp;
 static BlTls         g_tls;
 static bool          g_sockets;
-static bool          g_stopped;   // PrepareShutdown: offline until the process ends
+static bool          g_stopped;   // asked to leave (bl:link's Shutdown): offline until Resume or the process ends
 
 static char     g_text[0x4000];          // files read
 static char     g_doc[AGENT_DOC_LARGE];  // documents taken from the shared state
@@ -1405,8 +1405,8 @@ int main(int argc, char **argv)
             reload(false);
         }
         mutexLock(&g_lock);
-        // PlayGuard asked it (PrepareShutdown) or a manager did (bl:link's Shutdown).
-        const bool shutdown = g_shared.want_shutdown || agent_relay_leaving(&g_relay);
+        // A manager asked it to leave (bl:link's Shutdown), for an update or a stop.
+        const bool shutdown = agent_relay_leaving(&g_relay);
         const bool session = g_shared.app_session;
         mutexUnlock(&g_lock);
         if (shutdown && !g_stopped) {
