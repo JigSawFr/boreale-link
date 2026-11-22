@@ -46,3 +46,43 @@ jobs:
               -c "$f" -o "build/switch/$(basename "$f" .c).o"
           done
           ls -l build/switch
+
+  # The agent (agent/): the sysmodule that holds the console's one broker
+  # connection, built as a release builds it. It compiles boreale-kit's console
+  # helpers (source/core), which carries this library as a submodule and so cannot
+  # be one of ours: the kit is fetched beside it, at the commit agent/KIT_REF names
+  # (agent/README.md). The zip, the manifest and the sums are kept as artifacts.
+  agent:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    container:
+      image: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: boreale-link
+      - name: The kit the agent is built with
+        id: kit
+        run: echo "ref=$(tr -d '[:space:]' < boreale-link/agent/KIT_REF)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: JigSawFr/boreale-kit
+          ref: ${{ steps.kit.outputs.ref }}
+          path: boreale-kit
+          submodules: false
+      - name: Build the agent
+        working-directory: boreale-link/agent
+        run: |
+          set -e
+          make AGENT_VERSION=0.0.0-ci
+          AGENT_VERSION=0.0.0-ci ./dist.sh
+      - name: The agent
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: boreale-link-agent
+          path: |
+            boreale-link/agent/out/boreale-link.zip
+            boreale-link/agent/out/boreale-link.nsp
+            boreale-link/agent/out/boreale-link.json
+            boreale-link/agent/out/SHA256SUMS.txt
+          if-no-files-found: error

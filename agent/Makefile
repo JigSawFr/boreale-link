@@ -5,9 +5,9 @@
 # layer and the remote link's documents and orders), this library (../source) and
 # the kit's console helpers (boreale-kit's source/core).
 #
-# Built from inside an app: boreale-kit is the sibling of this library there
+# Built with boreale-kit beside this library: from inside an app it is the sibling of this library there
 # (library/boreale-kit next to library/boreale-link). The library does not
-# carry the kit, so it cannot build the agent on its own.
+# carry the kit, so a build of its own (ci.yml, a release) fetches it at agent/KIT_REF; dist.sh makes the release's files.
 #
 # AGENT_VERSION: the version the app shows for it (the app passes its own).
 

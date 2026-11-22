@@ -94,16 +94,37 @@ Details: [`docs/sync-protocol.md`](https://github.com/JigSawFr/PlayGuard/blob/ma
 
 ## Build
 
-The agent is built from inside an app, which has this library and boreale-kit
-side by side (`library/boreale-link`, `library/boreale-kit`): the kit's
-`source/core` is part of it, and the library does not carry the kit.
+The agent compiles boreale-kit's console helpers (`source/core`), and the kit
+carries this library as a submodule, so the library cannot carry the kit back: it
+is built with the kit **beside** it (`../../boreale-kit` from this folder).
 
-```sh
-make -C library/boreale-link/agent AGENT_VERSION=1.2.0   # -> out/boreale-link.nsp (needs devkitPro, DEVKITPRO set)
-```
+- **From an app**, which has this library and the kit side by side
+  (`library/boreale-link`, `library/boreale-kit`):
 
-PlayGuard's `make agent`, `make dist-agent` and `make` (the .nro with this module
-bundled in its romfs) do that; so will PlayShelf's.
+  ```sh
+  make -C library/boreale-link/agent AGENT_VERSION=1.2.0   # -> out/boreale-link.nsp (needs devkitPro, DEVKITPRO set)
+  ```
+
+  PlayGuard's and PlayShelf's `make agent` (and `make`, the .nro with the agent
+  bundled in its romfs) do that.
+- **From this repository**, as the CI and a release do: check boreale-kit out at the
+  commit `KIT_REF` names, next to this repository, then `make` here and
+  `AGENT_VERSION=1.2.0 ./dist.sh`.
+
+## Release
+
+A release of this library (a `vX.Y.Z` tag) carries the agent
+(`.github/workflows/agent-release.yml`, built as `ci.yml`'s `agent` job builds it):
+
+| Asset | What it is |
+|---|---|
+| `boreale-link.zip` | The SD card's layout (`atmosphere/contents/4200000000504741/`: `exefs.nsp`, `flags/boot2.flag`, `toolbox.json`, `LICENSE.txt`), to unzip at its root; reproducible |
+| `boreale-link.nsp` | The exefs alone |
+| `boreale-link.json` | The manifest the homebrews read (`schema` 1): `version`, the `bl:link` `protocol` it speaks, `tid`, the nsp's `sha256`, the `kit` commit it was built with |
+| `SHA256SUMS.txt` | The sums of the three above |
+
+`KIT_REF` is the commit of boreale-kit the agent is built with: it moves in a pull
+request of its own, tested by `ci.yml`, never by a release.
 
 It links PlayGuard's module (`../modules/playguard/`: its C service layer in
 `core/`, the remote link's documents and orders in `sync/`, the play log in
