@@ -1545,7 +1545,7 @@ static size_t read_icon(void *ctx, void *buf, size_t cap)
     return fread(buf, 1, cap, (FILE *)ctx);
 }
 
-// The game played has no icon on the broker yet (PlayGuard publishes them,
+// The app in the foreground (a game, or a homebrew with its own id) has no icon on the broker yet (PlayGuard publishes them,
 // docs/sync-protocol.md: one it has not sent, its link offline then, or
 // publish_icons turned on since): its JPEG from PlayGuard's icon cache on the
 // SD card, streamed a piece at a time (the engine's scratch: no buffer of its
@@ -1557,7 +1557,7 @@ static void publish_playing_icon(void)
 {
     const u64 id = g_playing;
     if (!id || id == g_icon_looked || !g_conf.publish_icons || !sync_engine_online(&g_engine)) return;
-    if (sync_titles_kind(&g_titles, id) != SyncTitle_Game) return;   // only games' icons
+    if (sync_titles_kind(&g_titles, id) == SyncTitle_System) return;   // the console's own programs have none
     g_icon_looked = id;
     char target[SYNC_ICONS_TARGET_LEN + 1];
     sync_icons_target(g_conf.host, g_conf.port, g_engine.base, target);
