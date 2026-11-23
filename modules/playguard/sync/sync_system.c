@@ -72,6 +72,33 @@ size_t sync_system_build(const SyncSystem *s, char *out, size_t cap)
         bl_json_obj_end(&j);
     }
 
+    // What the agent's checks found (agent.conf): the newest versions out
+    // there, and the clocks against a time server. Absent without checks.
+    if (s->latest) {
+        const BlLatest *l = s->latest;
+        if (hw) {
+            bl_json_key(&j, "latest");
+            bl_json_obj(&j);
+            bl_json_kint_or_null(&j, "checked", l->checked > 0, l->checked);
+            bl_json_kstr_or_null(&j, "firmware", l->firmware);
+            bl_json_kstr_or_null(&j, "atmosphere", l->atmosphere);
+            bl_json_kstr_or_null(&j, "hekate", l->hekate);
+            bl_json_kstr_or_null(&j, "syspatch", l->syspatch);
+            bl_json_kstr_or_null(&j, "integration", l->integration);
+            bl_json_obj_end(&j);
+        }
+        if (con) {
+            const bool known = l->clock_checked > 0;
+            bl_json_key(&j, "clock");
+            bl_json_obj(&j);
+            bl_json_kint_or_null(&j, "checked", known, l->clock_checked);
+            bl_json_kint_or_null(&j, "network_drift_s", known, l->clock_network);   // + : the console is ahead
+            bl_json_kint_or_null(&j, "user_drift_s", known, l->clock_user);
+            bl_json_kstr_or_null(&j, "server", known ? l->clock_server : NULL);
+            bl_json_obj_end(&j);
+        }
+    }
+
     bl_json_key(&j, "hardware");
     bl_json_obj(&j);
     bl_json_kstr_or_null(&j, "model", lh ? console_model_name(lh->model) : NULL);

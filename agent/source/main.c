@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,8 +32,12 @@
 
 #include "agent_core.h"
 #include "agent_relay.h"
+#include "bl_agent_conf.h"
 #include "bl_app.h"
 #include "bl_cache.h"
+#include "bl_http.h"
+#include "bl_latest.h"
+#include "bl_ntp.h"
 #include "bl_relay.h"
 #include "bl_net.h"
 #include "bl_tls.h"
@@ -317,6 +322,12 @@ static BlTcp         g_tcp;
 static BlTls         g_tls;
 static bool          g_sockets;
 static bool          g_stopped;   // asked to leave (bl:link's Shutdown): offline until Resume or the process ends
+
+// What the checks thread found (latest.conf), for the system document: written
+// there, read by the loop. g_checks_on: agent.conf asks for a check at least,
+// so that the document says "checked" or "not yet" instead of saying nothing.
+static BlLatest      g_latest;
+static bool          g_checks_on;
 
 static char     g_text[0x4000];          // files read
 static char     g_doc[AGENT_DOC_LARGE];  // documents taken from the shared state
@@ -937,8 +948,14 @@ static size_t host_system(void *ctx, char *out, size_t cap)
     const struct mallinfo mi = mallinfo();
     const SyncAgentHealth health = { (uint32_t)(bl_now_ms() / 1000), (int32_t)mi.uordblks, INNER_HEAP_SIZE,
                                      BL_RELAY_PROTOCOL, AGENT_PROTOCOL, g_module_on };
+    static BlLatest latest;
+    mutexLock(&g_lock);
+    const bool checks = g_checks_on;
+    if (checks) latest = g_latest;
+    mutexUnlock(&g_lock);
     SyncSystem s = { now, &si, &live, &sd, &nand, hekate, g_app_version[0] ? g_app_version : NULL, AGENT_VERSION,
-                     g_conf.publish_serial && g_nro.serial[0] ? g_nro.serial : NULL, &g_conf, &health };
+                     g_conf.publish_serial && g_nro.serial[0] ? g_nro.serial : NULL, &g_conf, &health,
+                     checks ? &latest : NULL };
     return sync_system_build(&s, out, cap);
 }
 
@@ -1020,7 +1037,7 @@ static bool sockets_up(void)
         // size (one time) can be filled by it, and then the ACKs that would
         // empty it have none.
         .sb_efficiency = 4,
-        .num_bsd_sessions = 2,   // the watchdog's shutdown() does not wait behind a call that hangs
+        .num_bsd_sessions = 3,   // the loop, the checks thread, and the watchdog's shutdown(), which does not wait behind a call that hangs
         .bsd_service_type = BsdServiceType_Auto,
     };
     g_sockets = R_SUCCEEDED(socketInitialize(&cfg));
@@ -1100,6 +1117,220 @@ static void watchdog(void *arg)
                  (unsigned long long)((now - turn) / 1000), where, freed ? ": its socket shut down to free it" : "");
         slog("%s%s", line, NULL);
         watchdog_keep(line);
+    }
+}
+
+// ---- the checks: the newest versions and the clocks ----
+// What the app used to read when it was opened, read here every few hours
+// (agent.conf, off by default): the newest Atmosphère, hekate, sys-patch and
+// Home Assistant integration from their release pages (the redirect of
+// releases/latest, no API call and so no rate limit), the newest firmware from
+// switchbrew's System_Versions table, and the console's clocks against a time
+// server. Kept in latest.conf for the homebrews and in the system document
+// for Home Assistant. A thread of its own, since each exchange waits on the
+// network for seconds: the loop and its keep-alives never do. One check at
+// a time, after a failure again 10 minutes later, then 20, up to 2 hours.
+#define LATEST_PATH      "sdmc:/" BL_LATEST_FILE
+#define AGENT_CONF_PATH  "sdmc:/" BL_AGENT_CONF_FILE
+#define CHECKS_USER_AGENT "boreale-link/" AGENT_VERSION
+#define CHECKS_HTTP_MS   20000
+#define FIRMWARE_PAGE    "/w/index.php?title=System_Versions&action=raw"
+#define FIRMWARE_MAX     (256 * 1024)
+
+static Thread g_checks;
+
+// POSIX seconds from the wall clock the loop reads once a turn; 0 unknown.
+static int64_t checks_now(void)
+{
+    const u64 wall = g_wall_posix;
+    if (!wall) return 0;
+    const uint64_t now = bl_now_ms(), read = g_wall_ms;
+    return (int64_t)(wall + (now > read ? (now - read) / 1000 : 0));
+}
+
+// The newest release of `repo` ("owner/name"): where releases/latest leads.
+static bool latest_release(BlTls *tls, const char *repo, char *version, size_t cap)
+{
+    char path[160];
+    snprintf(path, sizeof(path), "/%s/releases/latest", repo);
+    memset(tls, 0, sizeof(*tls));
+    tls->tcp.fd = -1;
+    BlHttpResult r;
+    char tag[BL_LATEST_VER_MAX];
+    if (!bl_http_get(bl_tls_io(tls, NULL), "github.com", 443, path, CHECKS_USER_AGENT, CHECKS_HTTP_MS, NULL, NULL, 0, &r) ||
+        r.status < 300 || r.status > 399 || !bl_tag_of_url(r.location, tag, sizeof(tag)) ||
+        !bl_version_of_tag(tag, version, cap)) {
+        slog("check of %.64s: no release (%.64s)", repo, r.error[0] ? r.error : "no redirect to a release");
+        return false;
+    }
+    return true;
+}
+
+static bool firmware_piece(void *ctx, const char *data, size_t len)
+{
+    bl_firmware_scan_feed((BlFirmwareScan *)ctx, data, len);
+    return true;
+}
+
+static bool latest_firmware(BlTls *tls, char *version, size_t cap)
+{
+    static BlFirmwareScan scan;
+    bl_firmware_scan_init(&scan);
+    memset(tls, 0, sizeof(*tls));
+    tls->tcp.fd = -1;
+    BlHttpResult r;
+    if (!bl_http_get(bl_tls_io(tls, NULL), "switchbrew.org", 443, FIRMWARE_PAGE, CHECKS_USER_AGENT, CHECKS_HTTP_MS,
+                     firmware_piece, &scan, FIRMWARE_MAX, &r) ||
+        r.status != 200) {
+        slog("check of the firmware: switchbrew (%.64s)%s", r.error[0] ? r.error : "not 200", NULL);
+        return false;
+    }
+    const char *best = bl_firmware_scan_end(&scan);
+    if (!*best) {
+        slog("check of the firmware: no version in switchbrew's table%s%s", NULL, NULL);
+        return false;
+    }
+    snprintf(version, cap, "%s", best);
+    return true;
+}
+
+static void latest_save(const BlLatest *l)
+{
+    if (!bl_latest_may_write(l)) return;   // a newer schema's file: read, never written over
+    static char text[1024];
+    const size_t n = bl_latest_write(l, text, sizeof(text));
+    mkdir("sdmc:/config/boreale", 0777);
+    if (!n || !write_file(LATEST_PATH, text, n)) slog("cannot write latest.conf%s%s", NULL, NULL);
+}
+
+// All the versions; true when at least one was read (the others keep what
+// was known). `now`: Unix time.
+static bool checks_versions(BlTls *tls, int64_t now)
+{
+    static const struct { const char *repo; size_t at; } RELEASES[] = {
+        { "Atmosphere-NX/Atmosphere", offsetof(BlLatest, atmosphere) },
+        { "CTCaer/hekate", offsetof(BlLatest, hekate) },
+        { "impeeza/sys-patch", offsetof(BlLatest, syspatch) },
+        { "JigSawFr/boreale-ha", offsetof(BlLatest, integration) },
+    };
+    BlLatest l;
+    mutexLock(&g_lock);
+    l = g_latest;
+    mutexUnlock(&g_lock);
+    bool any = false;
+    char v[BL_LATEST_VER_MAX];
+    for (size_t i = 0; i < sizeof(RELEASES) / sizeof(RELEASES[0]); i++) {
+        if (!latest_release(tls, RELEASES[i].repo, v, sizeof(v))) continue;
+        snprintf((char *)&l + RELEASES[i].at, BL_LATEST_VER_MAX, "%s", v);
+        any = true;
+    }
+    if (latest_firmware(tls, v, sizeof(v))) {
+        snprintf(l.firmware, sizeof(l.firmware), "%s", v);
+        any = true;
+    }
+    if (!any) return false;
+    l.checked = now;
+    mutexLock(&g_lock);
+    g_latest = l;
+    mutexUnlock(&g_lock);
+    latest_save(&l);
+    slog("versions checked: Atmosphère %.16s, hekate %.16s", l.atmosphere[0] ? l.atmosphere : "?", l.hekate[0] ? l.hekate : "?");
+    return true;
+}
+
+// The console's clocks against the time server: the network clock (what the
+// play timer counts on) and the user clock, each in seconds ahead of it.
+static bool checks_clock(const BlAgentConf *conf, int64_t now)
+{
+    uint64_t server = 0, received = 0;
+    char err[96];
+    if (!bl_ntp_sample(conf->ntp_server, 2500, 2, &server, &received, err, sizeof(err))) {
+        slog("clock check: %.90s%s", err, NULL);
+        return false;
+    }
+    TimeSnapshot clocks;
+    time_clock_snapshot(&clocks);
+    // The server's time at the moment the clocks were read.
+    const int64_t at = (int64_t)server + (int64_t)((bl_now_ms() - received) / 1000);
+    if (R_FAILED(clocks.network_rc)) {
+        slog("clock check: the network clock cannot be read%s%s", NULL, NULL);
+        return false;
+    }
+    BlLatest l;
+    mutexLock(&g_lock);
+    l = g_latest;
+    mutexUnlock(&g_lock);
+    l.clock_checked = now;
+    l.clock_network = (int32_t)((int64_t)clocks.network_time - at);
+    l.clock_user = R_SUCCEEDED(clocks.user_rc) ? (int32_t)((int64_t)clocks.user_time - at) : 0;
+    snprintf(l.clock_server, sizeof(l.clock_server), "%s", conf->ntp_server);
+    mutexLock(&g_lock);
+    g_latest = l;
+    mutexUnlock(&g_lock);
+    latest_save(&l);
+    return true;
+}
+
+static void checks_conf(BlAgentConf *conf, uint64_t *mtime)
+{
+    const uint64_t m = mtime_of(AGENT_CONF_PATH);
+    if (m == *mtime) return;
+    *mtime = m;
+    static char text[1024];
+    const size_t n = m ? read_file(AGENT_CONF_PATH, text, sizeof(text)) : 0;
+    bl_agent_conf_parse(conf, text, n);   // absent: both off
+}
+
+static uint64_t checks_retry_ms(unsigned fails)
+{
+    const unsigned shift = fails > 4 ? 4 : (fails ? fails - 1 : 0);
+    const uint64_t ms = (10ULL * 60 * 1000) << shift;
+    return ms > 2ULL * 3600 * 1000 ? 2ULL * 3600 * 1000 : ms;
+}
+
+static void checks_thread(void *arg)
+{
+    (void)arg;
+    static BlAgentConf conf;
+    static BlTls tls;
+    uint64_t conf_mtime = 1, versions_retry = 0, clock_retry = 0;
+    unsigned versions_fails = 0, clock_fails = 0;
+    bool loaded = false;
+    bl_agent_conf_defaults(&conf);
+    for (;;) {
+        svcSleepThread(10000000000ULL);
+        if (!s_sd_mounted) continue;
+        checks_conf(&conf, &conf_mtime);
+        if (!loaded) {
+            // The last reading, from the card: a restart does not start over.
+            static char text[1024];
+            const size_t n = read_file(LATEST_PATH, text, sizeof(text));
+            BlLatest l;
+            bl_latest_parse(&l, n ? text : "", n);
+            mutexLock(&g_lock);
+            g_latest = l;
+            mutexUnlock(&g_lock);
+            loaded = true;
+        }
+        const bool want = conf.check_versions || conf.check_clock;
+        mutexLock(&g_lock);
+        g_checks_on = want;
+        mutexUnlock(&g_lock);
+        const int64_t now = checks_now();
+        if (!want || !now || !g_sockets || g_stopped) continue;
+        BlLatest cur;
+        mutexLock(&g_lock);
+        cur = g_latest;
+        mutexUnlock(&g_lock);
+        const uint64_t tick = bl_now_ms();
+        if (conf.check_versions && bl_latest_versions_due(&cur, now) && tick >= versions_retry) {
+            if (checks_versions(&tls, now)) versions_fails = 0;
+            else versions_retry = tick + checks_retry_ms(++versions_fails);
+        }
+        if (conf.check_clock && bl_latest_clock_due(&cur, now) && tick >= clock_retry) {
+            if (checks_clock(&conf, now)) clock_fails = 0;
+            else clock_retry = tick + checks_retry_ms(++clock_fails);
+        }
     }
 }
 
@@ -1391,6 +1622,8 @@ int main(int argc, char **argv)
     agent_ipc_start();
     wall_read(bl_now_ms());
     if (R_SUCCEEDED(threadCreate(&g_watchdog, watchdog, NULL, NULL, 0x2000, 0x2D, -2))) threadStart(&g_watchdog);
+    // Below the loop's priority (0x2C): a check waiting on the network never delays a turn.
+    if (R_SUCCEEDED(threadCreate(&g_checks, checks_thread, NULL, NULL, 0x6000, 0x30, -2))) threadStart(&g_checks);
     slog("agent %s started, firmware %s", AGENT_VERSION, g_firmware);
 
     for (;;) {

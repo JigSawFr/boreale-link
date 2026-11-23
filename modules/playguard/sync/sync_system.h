@@ -4,12 +4,16 @@
 // serial number (only when sync.conf's publish_serial says so), the space
 // left, power, network and when it started. Built by PlayGuard and by the
 // agent from the same readers (core/console_info.h); unknown values are null.
+// The agent adds `latest` (the newest Atmosphère, hekate, firmware, sys-patch and
+// integration it saw) and `clock` (how far the clocks are from a time server)
+// when its checks are on: a document without them is a console nobody checks.
 // Copyright (C) 2026 JigSawFr.  GPLv3-or-later (see LICENSE).
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bl_latest.h"
 #include "../core/console_info.h"
 #include "core/sysinfo.h"
 #include "sync_conf.h"
@@ -39,6 +43,7 @@ typedef struct {
     const char         *serial;          // NULL: not published (or not known)
     const SyncConf     *conf;            // what is published (publish_*); NULL: everything
     const SyncAgentHealth *health;       // NULL: not an agent
+    const BlLatest     *latest;          // the agent's version and clock checks (latest.conf); NULL: none made
 } SyncSystem;
 
 size_t sync_system_build(const SyncSystem *s, char *out, size_t cap);
