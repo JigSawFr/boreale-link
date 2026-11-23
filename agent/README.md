@@ -45,6 +45,11 @@ boreale-kit's `tests/sysmodule_flow/`).
   does (not while the lower limit would stop the game in progress, on the
   same weekday a week later). The day after "no more play today", or when
   the usual limit was "no limit", it leaves the question to PlayGuard.
+- Checks, when `agent.conf` asks (off by default), the newest Atmosphère, hekate,
+  sys-patch, firmware and Home Assistant integration, and the console's clocks
+  against a time server, from a thread of its own (every 12 h and 2 h, retried
+  after a failure): `latest.conf` and the `latest` and `clock` of `system`. See
+  the library's README, « What the agent checks ».
 - Changes nothing when PlayGuard was in read-only mode, or when the firmware
   is not the one PlayGuard last ran on (a system update PlayGuard has not
   checked): `nro_state.txt`.
@@ -88,7 +93,7 @@ pending), `agent_events.log` (the orders it carried out, imported into
 PlayGuard's history) and `agent_watchdog.log` (where its loop stopped, when
 it stopped; PlayGuard's report shows the last lines); a report asked for from
 Home Assistant goes to
-`logs/reports/` with PlayGuard's. At boot it waits up to 10 s for the SD card,
+`logs/reports/` with PlayGuard's. In `sd:/config/boreale/` it reads `agent.conf` (its checks) and writes `latest.conf`. At boot it waits up to 10 s for the SD card,
 then tries again every 30 s.
 Details: [`docs/sync-protocol.md`](https://github.com/JigSawFr/PlayGuard/blob/main/docs/sync-protocol.md).
 

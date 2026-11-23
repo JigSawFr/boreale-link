@@ -30,7 +30,8 @@ CFILES      := main.c agent_core.c agent_ipc.c agent_relay.c \
                console_info.c console_info_pure.c \
                bl_json.c mqtt_packet.c mqtt_client.c bl_kv.c bl_link_conf.c sync_conf.c sync_apply.c sync_records.c sync_exec.c \
                sync_entities.c sync_discovery.c sync_state.c sync_system.c sync_watch.c sync_engine.c \
-               bl_net.c bl_tls.c bl_session.c sync_icons.c sync_titles.c sync_notices.c bl_jread.c bl_app.c bl_notices.c bl_relay.c
+               bl_net.c bl_tls.c bl_session.c sync_icons.c sync_titles.c sync_notices.c bl_jread.c bl_app.c bl_notices.c bl_relay.c \
+               bl_latest.c bl_http.c bl_ntp.c bl_agent_conf.c
 # nacp.c reads compressed game titles (zlib).
 EXTRA_LIBS  := -lz
 

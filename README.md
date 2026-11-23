@@ -30,6 +30,10 @@ of them; this code comes from its `source/link/`.
 | `source/bl_jread.{h,c}` | A JSON reader without allocation: the text cut into tokens kept in the caller's array, strings unescaped, the members a version does not know copied as written. |
 | `source/bl_notices.{h,c}` | `sd:/config/boreale/notices/<module>.json`, the shared bell: each homebrew's notices (to do, going on, failed, for information), already written in the console's language, each with a route that opens its homebrew at a screen (`--open=<route>`). |
 | `source/bl_updates.{h,c}` | `sd:/config/boreale/updates.conf`, the newest release of each homebrew as the last update check found it: one homebrew checks for all, at most once a day. |
+| `source/bl_latest.{h,c}` | `sd:/config/boreale/latest.conf`, what the console runs on as the agent last saw it: the newest Atmosphère, hekate, sys-patch, Nintendo firmware and Home Assistant integration, and how far the network and user clocks are from a time server. Also reads a version out of a release tag, a redirect and switchbrew's table. |
+| `source/bl_agent_conf.{h,c}` | `sd:/config/boreale/agent.conf`, the agent's own settings: `check_versions`, `check_clock` (both off by default) and `ntp_server`. |
+| `source/bl_http.{h,c}` | One HTTP/1.0 GET over a `BlIo` (plain or TLS): status, `Location`, the body in pieces. |
+| `source/bl_ntp.{h,c}` | One SNTP sample over UDP, read-only (the packet's checks are plain C). |
 | `source/bl_prefs.{h,c}` | `sd:/config/boreale/prefs.conf`, the look the homebrews share (language, theme, text size, effects, density): each follows it by default and may keep its own. |
 | `source/bl_cache.{h,c}` | `sd:/config/boreale/cache/`, the games' icons and names read from the console, shared by the homebrews: one rule for emptying it (the console language changed, the icons over their bounds). |
 | `source/bl_app.{h,c}` | `sd:/config/boreale/apps/<module>.conf`, the registry of the Boréale homebrews installed: each writes its own file when it starts (name, version, `.nro`, icon, releases, `publish`). The file is also what unlocks the homebrew's module in the agent (`bl_app_unlocks()`). |
@@ -151,6 +155,29 @@ keep one of its own instead (its own settings say which); whichever changes
 a shared value writes it here, and the others take it when they next start.
 A `bl_kv` file with a `schema`, like `link.conf`.
 
+## What the agent checks (off by default)
+
+`sd:/config/boreale/agent.conf` (`bl_agent_conf`) lets the agent ask the network
+for more than its broker. Nothing leaves the console for it until it is turned on:
+
+```
+schema=1
+check_versions=1         the newest Atmosphère, hekate, sys-patch, firmware and boreale-ha, every 12 h
+check_clock=1            the console's clocks against a time server, every 2 h
+ntp_server=pool.ntp.org
+```
+
+The agent's checks thread reads the release pages (`github.com/<repo>/releases/latest`
+redirects to the newest tag: no API, no rate limit) and switchbrew's
+`System_Versions` table over TLS, and one SNTP sample over UDP. A failure keeps
+what was known and tries again after 10 minutes, doubling up to 2 hours. The
+result is `sd:/config/boreale/latest.conf` (`bl_latest`, a `bl_kv` file with a
+`schema`), read by the homebrews, and the `latest` and `clock` objects of the
+`system` document for Home Assistant. `clock_network` and `clock_user` are the
+seconds the console's clock is ahead of the server's (negative: behind), to the
+second, which is all SNTP's whole seconds give. The checks need the network the
+link starts: they wait while the link is off.
+
 ## The update check made for all
 
 `sd:/config/boreale/updates.conf` (`bl_updates`) keeps the newest release
@@ -191,7 +218,7 @@ make test          # the host tests, with the address and undefined-behaviour sa
 the `key=value` reader with its schema and round trip; `tests/link_conf` the
 shared broker settings; `tests/app` the registry's files; `tests/cache` the
 shared cache of icons and names; `tests/prefs` the shared look;
-`tests/updates` the update check's file; `tests/notices` the JSON reader and
+`tests/updates` the update check's file; `tests/latest` the agent's readings (file, version of a tag, a redirect and switchbrew's table, read in pieces); `tests/agent_conf` its settings; `tests/http` the GET over a scripted stream (a head of several KB, a redirect, the body in pieces, failures); `tests/ntp` the SNTP packet's checks; `tests/notices` the JSON reader and
 the shared bell's files; `tests/relay` the relay's module and topic rules and its
 queue of orders; `tests/session` runs the session against a fake
 broker kept in memory, with a scripted clock. CI runs them under gcc and

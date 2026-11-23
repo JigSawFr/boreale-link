@@ -16,7 +16,11 @@ cache_SRC   := source/bl_kv.c source/bl_cache.c tests/cache/test.c
 prefs_SRC   := source/bl_kv.c source/bl_prefs.c tests/prefs/test.c
 updates_SRC := source/bl_kv.c source/bl_app.c source/bl_updates.c tests/updates/test.c
 relay_SRC   := source/bl_app.c source/bl_kv.c source/bl_relay.c source/bl_relay_nx.c tests/relay/test.c
-TESTS       := codec session link_conf app notices cache prefs updates relay
+latest_SRC  := source/bl_kv.c source/bl_link_conf.c source/bl_latest.c tests/latest/test.c
+http_SRC    := source/bl_http.c tests/http/test.c
+ntp_SRC     := source/bl_ntp.c source/bl_net.c tests/ntp/test.c
+agent_conf_SRC := source/bl_kv.c source/bl_agent_conf.c tests/agent_conf/test.c
+TESTS       := codec session link_conf app notices cache prefs updates relay latest http ntp agent_conf
 
 .PHONY: test clean
 test: $(addprefix $(OUT)/,$(TESTS))
