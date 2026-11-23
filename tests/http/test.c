@@ -73,12 +73,22 @@ static void test_redirect(void)
 {
     // GitHub's head: many headers, the Location in the middle, over 2 KB.
     char big[4096];
-    int n = snprintf(big, sizeof(big), "HTTP/1.1 302 Found\r\nServer: GitHub.com\r\nContent-Security-Policy: ");
-    for (int i = 0; i < 200; i++) n += snprintf(big + n, sizeof(big) - (size_t)n, "x-%d ", i);
-    n += snprintf(big + n, sizeof(big) - (size_t)n,
-                  "\r\nlocation: https://github.com/CTCaer/hekate/releases/tag/v6.5.4\r\nContent-Length: 0\r\n\r\n");
+    size_t n = 0;
+    const char *first = "HTTP/1.1 302 Found\r\nServer: GitHub.com\r\nContent-Security-Policy: ";
+    const char *last = "\r\nlocation: https://github.com/CTCaer/hekate/releases/tag/v6.5.4\r\nContent-Length: 0\r\n\r\n";
+    memcpy(big, first, strlen(first));
+    n = strlen(first);
+    for (int i = 0; i < 200; i++) {
+        char word[16];
+        const size_t w = (size_t)snprintf(word, sizeof(word), "x-%d ", i);   // at most 6 bytes
+        REQUIRE(w < sizeof(word) && n + w + strlen(last) < sizeof(big));
+        memcpy(big + n, word, w);
+        n += w;
+    }
+    memcpy(big + n, last, strlen(last));
+    n += strlen(last);
     for (size_t piece = 1; piece <= 600; piece += (piece < 10 ? 1 : 197)) {
-        Fake f = { big, (size_t)n, piece, 0, false, false, "", false };
+        Fake f = { big, n, piece, 0, false, false, "", false };
         BlHttpResult r;
         CHECK(bl_http_get(io_of(&f), "github.com", 443, "/CTCaer/hekate/releases/latest", "boreale-link/1", 5000, NULL,
                           NULL, 0, &r));
