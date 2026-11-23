@@ -85,7 +85,6 @@ const char *sync_policy_name(SyncPolicy p)
 typedef struct {
     SyncConf *c;
     int read;
-    bool prefix_read;   // topic_prefix was in the file
 } ParseCtx;
 
 // Whether the file has a `schema` line: bl_kv_read() reads none as schema 1,
@@ -97,11 +96,6 @@ static void on_schema_line(void *ctx, const char *key, const char *value)
     if (!strcmp(key, "schema")) *(bool *)ctx = true;
 }
 
-static void str_field(char *dst, size_t cap, const char *value)
-{
-    if (strlen(value) < cap) copy(dst, cap, value);
-}
-
 static void on_kv(void *vctx, const char *key, const char *value)
 {
     ParseCtx *p = (ParseCtx *)vctx;
@@ -109,42 +103,7 @@ static void on_kv(void *vctx, const char *key, const char *value)
     uint32_t u = 0;
     bool b = false;
     p->read++;
-    if (!strcmp(key, "enabled")) {
-        c->broker_keys = true;
-        if (bl_parse_bool(value, &b)) c->enabled = b;
-    } else if (!strcmp(key, "host")) {
-        c->broker_keys = true;
-        str_field(c->host, sizeof(c->host), value);
-    } else if (!strcmp(key, "port")) {
-        c->broker_keys = true;
-        if (bl_parse_uint(value, 1, 65535, &u)) c->port = (uint16_t)u;
-    } else if (!strcmp(key, "tls")) {
-        c->broker_keys = true;
-        if (bl_parse_bool(value, &b)) c->tls = b;
-    } else if (!strcmp(key, "ca_file")) {
-        c->broker_keys = true;
-        str_field(c->ca_file, sizeof(c->ca_file), value);
-    } else if (!strcmp(key, "mqtt_version")) {
-        c->broker_keys = true;
-        if (!strcmp(value, "auto")) c->mqtt_version = SyncMqtt_Auto;
-        else if (!strcmp(value, "5") || !strcmp(value, "5.0")) c->mqtt_version = SyncMqtt_V5;
-        else if (!strcmp(value, "3.1.1") || !strcmp(value, "4")) c->mqtt_version = SyncMqtt_V311;
-    } else if (!strcmp(key, "username")) {
-        c->broker_keys = true;
-        str_field(c->username, sizeof(c->username), value);
-    } else if (!strcmp(key, "password")) {
-        c->broker_keys = true;
-        str_field(c->password, sizeof(c->password), value);
-    } else if (!strcmp(key, "allow_anonymous")) {
-        c->broker_keys = true;
-        if (bl_parse_bool(value, &b)) c->allow_anonymous = b;
-    } else if (!strcmp(key, "console_id")) {
-        c->broker_keys = true;
-        if (sync_conf_id_valid(value)) copy(c->console_id, sizeof(c->console_id), value);
-    } else if (!strcmp(key, "console_name")) {
-        c->broker_keys = true;
-        str_field(c->console_name, sizeof(c->console_name), value);
-    } else if (!strcmp(key, "policy")) {
+    if (!strcmp(key, "policy")) {
         if (!strcmp(value, "ask")) c->policy = SyncPolicy_Ask;
         else if (!strcmp(value, "auto")) c->policy = SyncPolicy_Auto;
         else if (!strcmp(value, "off")) c->policy = SyncPolicy_Off;
@@ -170,19 +129,9 @@ static void on_kv(void *vctx, const char *key, const char *value)
         if (bl_parse_bool(value, &b)) c->ha_discovery = b;
     } else if (!strcmp(key, "poll_s")) {
         if (bl_parse_uint(value, 10, 300, &u)) c->poll_s = (uint16_t)u;
-    } else if (!strcmp(key, "topic_prefix")) {
-        c->broker_keys = true;
-        if (strlen(value) < sizeof(c->topic_prefix) && prefix_valid(value)) {
-            copy(c->topic_prefix, sizeof(c->topic_prefix), value);
-            p->prefix_read = true;
-        }
     } else if (!strcmp(key, "legacy_prefix")) {
         if (strlen(value) < sizeof(c->legacy_prefix) && prefix_valid(value))
             copy(c->legacy_prefix, sizeof(c->legacy_prefix), value);
-    } else if (!strcmp(key, "discovery_prefix")) {
-        c->broker_keys = true;
-        if (strlen(value) < sizeof(c->discovery_prefix) && prefix_valid(value))
-            copy(c->discovery_prefix, sizeof(c->discovery_prefix), value);
     } else if (!strcmp(key, "log_level")) {
         if (bl_parse_uint(value, 0, 2, &u)) c->log_level = (int)u;
     } else {
@@ -192,9 +141,8 @@ static void on_kv(void *vctx, const char *key, const char *value)
 
 bool sync_conf_parse(SyncConf *c, const char *text, size_t len)
 {
-    ParseCtx p = { c, 0, false };
+    ParseCtx p = { c, 0 };
     bl_kv_file_init(&c->file, c->kept, sizeof(c->kept));   // its own buffer, even in a copy
-    c->broker_keys = false;
     bool has_schema = false;
     bl_kv_each(text, len, on_schema_line, &has_schema);
     bl_kv_read(&c->file, text, len, on_kv, &p);
@@ -203,9 +151,7 @@ bool sync_conf_parse(SyncConf *c, const char *text, size_t len)
     // Schema 1 published under <prefix>/<id>/ with "playguard" by default:
     // the default moves to "boreale", and the old tree is cleared once.
     if (p.read > 0 && c->file.schema == 1) {
-        const char *old = p.prefix_read ? c->topic_prefix : "playguard";
-        if (!c->legacy_prefix[0]) copy(c->legacy_prefix, sizeof(c->legacy_prefix), old);
-        if (!strcmp(old, "playguard")) copy(c->topic_prefix, sizeof(c->topic_prefix), "boreale");
+        if (!c->legacy_prefix[0]) copy(c->legacy_prefix, sizeof(c->legacy_prefix), "playguard");
     }
     return p.read > 0 || len == 0;
 }

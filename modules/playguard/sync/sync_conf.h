@@ -23,10 +23,9 @@ extern "C" {
 // 2: the topics moved under boreale/<id>/ (docs/sync-protocol.md); a file of
 // schema 1 is read with its default prefix "playguard" taken to "boreale", and
 // the old tree to clear once (legacy_prefix).
-// 3: the broker's keys left for config/boreale/link.conf; a file of schema 1
-// or 2 gives them to it, once, and is written again without them
-// (`broker_keys`). Reading them goes with the release after the one that
-// moves them (workbench's plans/boreale/suivi.md).
+// 3: the broker's keys live in config/boreale/link.conf alone. This file no
+// longer reads them: a key left in a file from before is an unknown one, kept
+// like any other.
 #define SYNC_CONF_SCHEMA   3
 #define SYNC_HOST_MAX      254
 #define SYNC_USER_MAX      65
@@ -103,9 +102,6 @@ typedef struct {
     // copy has to point it at its own `kept` (sync_conf_write does).
     BlKvFile   file;
     char       kept[SYNC_EXTRA_MAX];
-    // The file had broker keys (schema 1 or 2): they go to link.conf, and the
-    // file is written again without them.
-    bool       broker_keys;
     // Not in the file: set by the host, which runs on an emuMMC. sync.conf is
     // shared by every system on the SD card, and each has its own parental
     // controls: an emuMMC is a device of its own (sync_conf_device_id).
@@ -154,8 +150,7 @@ const char *sync_mqtt_version_name(SyncMqttVersion v);
 // The broker's part of the settings, which config/boreale/link.conf holds
 // for every Boréale homebrew (bl_link_conf): enabled, the broker, TLS, the
 // MQTT version, the credentials, the console's id and name, the prefixes.
-// link.conf holds them alone: sync.conf's own (schema 1 or 2) are moved to
-// it once (`broker_keys`). `l` keeps the lines it read and does not know.
+// link.conf holds them alone. `l` keeps the lines it read and does not know.
 void sync_conf_to_link(const SyncConf *c, BlLinkConf *l);
 void sync_conf_from_link(SyncConf *c, const BlLinkConf *l);
 

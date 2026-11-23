@@ -22,7 +22,7 @@ boreale-kit's `tests/sysmodule_flow/`).
 
 ## What it does
 
-- Connects to the broker set in `sd:/config/playguard/sync.conf` (the same
+- Connects to the broker set in `sd:/config/boreale/link.conf` (the same
   settings as PlayGuard, same session engine: `modules/playguard/sync/sync_engine.c` on
   boreale-link's `bl_session.c`),
   as the client `bl-<id>-link`, with `offline` as its last will. `<id>` is
