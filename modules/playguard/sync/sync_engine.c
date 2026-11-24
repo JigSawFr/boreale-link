@@ -9,6 +9,7 @@
 #include "sync_state.h"
 
 #define ACTIVITY_PERIOD_MS   60000ULL
+#define STATE_REPUBLISH_MS   300000ULL   // an unchanged state or system document is still sent this often
 #define STATE_SOON_MS        300ULL
 // Home Assistant's birth and last-will topic (its MQTT integration's default).
 #define HA_STATUS_TOPIC      "homeassistant/status"
@@ -142,6 +143,7 @@ void sync_engine_sync_now(SyncEngine *e)
     e->want_state = e->want_activity = e->want_discovery = e->want_names = e->want_clear = true;
     e->want_capabilities = true;
     e->notices_hash = 0;
+    e->state_hash = e->system_hash = 0;
     // "online" again: another client of the same console (PlayGuard's own
     // session, handing over to the agent) may have left "offline" behind.
     e->want_online = true;
@@ -722,6 +724,19 @@ static void publish_shared_bell(SyncEngine *e)
     if (h != e->notices_hash && sync_engine_publish(e, "notices", e->scratch, n, true) == 0) e->notices_hash = h;
 }
 
+// Publishes a retained document unless it is the one already out and recent.
+static void publish_changed(SyncEngine *e, const char *sub, uint32_t *last_hash, uint64_t *last_ms, uint64_t now, size_t n)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < n; i++) h = (h ^ (uint8_t)e->scratch[i]) * 16777619u;
+    h = h ? h : 1;
+    if (h == *last_hash && now - *last_ms < STATE_REPUBLISH_MS) return;
+    if (sync_engine_publish(e, sub, e->scratch, n, true) == 0) {
+        *last_hash = h;
+        *last_ms = now;
+    }
+}
+
 static void publish_due(SyncEngine *e)
 {
     const uint64_t now = e->now_ms();
@@ -752,10 +767,10 @@ static void publish_due(SyncEngine *e)
     if (e->want_state || now >= e->next_state_ms) {
         if (now >= e->next_state_ms || e->want_state) {
             size_t n = e->host.state && !e->no_module ? e->host.state(e->host.ctx, e->scratch, sizeof(e->scratch)) : 0;
-            if (n) sync_engine_publish(e, "state", e->scratch, n, true);
+            if (n) publish_changed(e, "state", &e->state_hash, &e->state_pub_ms, now, n);
             if (!e->no_module) publish_notices(e);   // what building the state found (the host's sync_watch)
             n = e->host.system && bl_session_online(&e->session) ? e->host.system(e->host.ctx, e->scratch, sizeof(e->scratch)) : 0;
-            if (n) sync_engine_publish(e, "system", e->scratch, n, true);
+            if (n) publish_changed(e, "system", &e->system_hash, &e->system_pub_ms, now, n);
             publish_shared_bell(e);
             if (n && e->host.device && e->conf.ha_discovery && !e->no_module) {
                 SyncDevice dev;

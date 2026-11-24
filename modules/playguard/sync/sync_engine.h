@@ -131,6 +131,10 @@ typedef struct {
     bool        want_capabilities;
     bool        no_module;       // PlayGuard's module is off (sync_engine_set_module): the console's own documents only
     uint32_t    notices_hash;    // the notices document last published (0: publish the next one)
+    // The state and system documents last published: the hash and when. An
+    // identical one is not sent again before STATE_REPUBLISH_MS (0: publish the next one).
+    uint32_t    state_hash, system_hash;
+    uint64_t    state_pub_ms, system_pub_ms;
     uint64_t    next_state_ms, next_activity_ms;
     bool        discovery_published;
     SyncDevice  device;          // as the last discovery said it
