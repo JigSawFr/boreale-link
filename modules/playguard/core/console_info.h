@@ -51,6 +51,17 @@ typedef struct {
 
 void console_live_init(ConsoleLive *out);   // every field unknown
 void console_live_read(ConsoleLive *out);
+// Only what changes while the console runs (power, dock, temperature,
+// network, uptime): the model, the nickname and the region of `out` are kept,
+// so a caller reads those once with console_live_read() and then refreshes.
+void console_live_read_dynamic(ConsoleLive *out);
+// A read of a service that took `ms` or more (what: "psm (battery, charger)"),
+// told when the call returns; set by the agent for its log. libnx readers only.
+typedef void (*console_slow_fn)(const char *what, uint32_t ms);
+void console_info_watch(console_slow_fn fn, uint32_t slow_ms);
+// The read under way and for how long (NULL when none): for a watchdog on
+// another thread, to name the service a call is stuck in. libnx readers only.
+const char *console_read_stage(uint64_t *since_ms);
 // The console nickname alone (System Settings), "" unknown: the console's
 // name in Home Assistant when sync.conf names none.
 void console_nickname_read(char out[0x80]);

@@ -575,6 +575,8 @@ static void name_of(u64 app_id, char *out, size_t cap)
 static size_t host_profiles(void *ctx, char (*names)[SYNC_PROFILE_MAX], size_t max);
 static bool profile_days(void *ctx, const char *name, uint16_t days[7]);
 
+static void readings_nickname(char out[0x80]);
+
 static size_t own_state(char *out, size_t cap)
 {
     static PctlStatus st;
@@ -588,9 +590,7 @@ static size_t own_state(char *out, size_t cap)
     phase(was);
     sysinfo_get(&si);
     char nickname[0x80];
-    was = phase("the console's nickname (set:sys)");
-    console_nickname_read(nickname);
-    phase(was);
+    readings_nickname(nickname);
     bool accurate = false;
     const bool accurate_ok = R_SUCCEEDED(time_network_accuracy(&accurate));
     char date[11];
@@ -900,10 +900,97 @@ static void host_log(void *ctx, const char *line)
     slog("%s%s", line, NULL);
 }
 
-// The system document: the console read now, the space left and hekate every
-// 5 minutes, PlayGuard's version as its last session said it, the serial
-// number only when sync.conf's publish_serial asks for it.
-#define SPACE_EVERY_MS (5 * 60 * 1000ULL)
+// ---- the console's readings, off the loop ----
+// The services of the console (psm, ts, omm, apm, nifm, set, set:sys, fs)
+// are read by a thread of their own, below the loop in priority, into a copy
+// the documents take: a call that hangs around a sleep makes the figures
+// older, never stops the loop and its keep-alives. The model, the nickname
+// and the region are read again every STATIC_EVERY_MS, the rest every
+// poll_s; the space left and hekate every SPACE_EVERY_MS. A call that took
+// long is in the log (console_info_watch), and one still under way past
+// READ_STUCK_MS is named by the watchdog.
+#define SPACE_EVERY_MS  (5 * 60 * 1000ULL)
+#define STATIC_EVERY_MS (5 * 60 * 1000ULL)
+#define READ_SLOW_MS    1500
+#define READ_STUCK_MS   30000ULL
+static Thread g_readings;
+static ConsoleLive g_live_cache;
+static ConsoleSpace g_sd_cache = { -1, -1 }, g_nand_cache = { -1, -1 };
+static char g_hekate_cache[16];
+static bool g_live_ready;   // under g_lock
+
+static void watchdog_keep(const char *line);
+
+static void readings_slow(const char *what, uint32_t ms)
+{
+    char took[16];
+    snprintf(took, sizeof(took), "%lu", (unsigned long)ms);
+    slog("a read of %s took %s ms", what, took);
+    if (ms >= 10000) {
+        char line[AGENT_LOG_LINE];
+        snprintf(line, sizeof(line), "a read of %s took %lu ms", what, (unsigned long)ms);
+        watchdog_keep(line);
+    }
+}
+
+static void readings_thread(void *arg)
+{
+    (void)arg;
+    static ConsoleLive live;
+    static ConsoleSpace sd = { -1, -1 }, nand = { -1, -1 };
+    static char hekate[16];
+    uint64_t statics_at = 0, space_at = 0;
+    for (;;) {
+        const uint64_t now = bl_now_ms();
+        if (!statics_at || now - statics_at >= STATIC_EVERY_MS) {
+            statics_at = now ? now : 1;
+            console_live_read(&live);
+        } else {
+            console_live_read_dynamic(&live);
+        }
+        if (!space_at || now - space_at >= SPACE_EVERY_MS) {
+            space_at = now ? now : 1;
+            console_space_read(&sd, &nand);
+            if (!console_hekate("sdmc:/", hekate)) hekate[0] = '\0';
+        }
+        mutexLock(&g_lock);
+        g_live_cache = live;
+        g_sd_cache = sd;
+        g_nand_cache = nand;
+        memcpy(g_hekate_cache, hekate, sizeof(g_hekate_cache));
+        g_live_ready = true;
+        mutexUnlock(&g_lock);
+        const uint16_t every = g_conf.poll_s < 10 ? 10 : g_conf.poll_s;
+        svcSleepThread((u64)every * 1000000000ULL);
+    }
+}
+
+static void readings_start(void)
+{
+    console_info_watch(readings_slow, READ_SLOW_MS);
+    console_live_init(&g_live_cache);
+    if (R_SUCCEEDED(threadCreate(&g_readings, readings_thread, NULL, NULL, 0x4000, 0x30, -2))) threadStart(&g_readings);
+    // The first documents want a console read: up to 3 s for it, no more.
+    for (int i = 0; i < 60; i++) {
+        mutexLock(&g_lock);
+        const bool ready = g_live_ready;
+        mutexUnlock(&g_lock);
+        if (ready) return;
+        svcSleepThread(50000000ULL);
+    }
+}
+
+static void readings_nickname(char out[0x80])
+{
+    mutexLock(&g_lock);
+    memcpy(out, g_live_cache.nickname, 0x80);
+    mutexUnlock(&g_lock);
+    out[0x80 - 1] = '\0';
+}
+
+// The system document: the console as last read, PlayGuard's version as its
+// last session said it, the serial number only when sync.conf's
+// publish_serial asks for it.
 static char g_app_version[AGENT_VERSION_MAX];
 static SyncDevice g_device;   // the console as the last system document read it
 
@@ -912,20 +999,15 @@ static size_t host_system(void *ctx, char *out, size_t cap)
     (void)ctx;
     static SysInfo si;
     static ConsoleLive live;
-    static ConsoleSpace sd = { -1, -1 }, nand = { -1, -1 };
+    static ConsoleSpace sd, nand;
     static char hekate[16];
-    static uint64_t space_at;
     sysinfo_get(&si);
-    const char *was = phase("the console's readings (psm, ts, apm, nifm)");
-    console_live_read(&live);
-    const uint64_t now_ms = bl_now_ms();
-    if (!space_at || now_ms - space_at >= SPACE_EVERY_MS) {
-        space_at = now_ms ? now_ms : 1;
-        phase("the storage (fs)");
-        console_space_read(&sd, &nand);
-        if (!console_hekate("sdmc:/", hekate)) hekate[0] = '\0';
-    }
-    phase(was);
+    mutexLock(&g_lock);
+    live = g_live_cache;
+    sd = g_sd_cache;
+    nand = g_nand_cache;
+    memcpy(hekate, g_hekate_cache, sizeof(hekate));
+    mutexUnlock(&g_lock);
     sync_device_of(&si, &live, &g_device);
     mutexLock(&g_lock);
     if (g_shared.app_session && g_shared.app_version[0])
@@ -948,7 +1030,8 @@ static size_t host_system(void *ctx, char *out, size_t cap)
 }
 
 // The console for the discovery's device: as the last system document read
-// it, or read now when the discovery comes first (at the first connection).
+// it, or as the last console read when the discovery comes first (at the
+// first connection).
 static void host_device(void *ctx, SyncDevice *out)
 {
     (void)ctx;
@@ -956,9 +1039,9 @@ static void host_device(void *ctx, SyncDevice *out)
         SysInfo si;
         ConsoleLive live;
         sysinfo_get(&si);
-        const char *was = phase("the console's readings (psm, ts, apm, nifm)");
-        console_live_read(&live);
-        phase(was);
+        mutexLock(&g_lock);
+        live = g_live_cache;
+        mutexUnlock(&g_lock);
         sync_device_of(&si, &live, &g_device);
     }
     *out = g_device;
@@ -1080,6 +1163,7 @@ static void watchdog(void *arg)
 {
     (void)arg;
     uint64_t told = 0, prev = 0;
+    const char *read_told = NULL;
     for (;;) {
         svcSleepThread(5000000000ULL);
         const uint64_t turn = g_turn_ms, now = bl_now_ms();
@@ -1091,6 +1175,20 @@ static void watchdog(void *arg)
             told = 0;
             slog("the loop turns again%s%s", NULL, NULL);
             watchdog_keep("the loop turns again");
+        }
+        // A read of the console stuck in a service, on the thread of the
+        // readings: the loop is free, but the figures age; said once.
+        uint64_t read_for = 0;
+        const char *stage = console_read_stage(&read_for);
+        if (!stage || read_for < READ_STUCK_MS) {
+            read_told = NULL;
+        } else if (awake && stage != read_told) {
+            read_told = stage;
+            char line[AGENT_LOG_LINE];
+            snprintf(line, sizeof(line), "a read of %s has not returned for %llu s", stage,
+                     (unsigned long long)(read_for / 1000));
+            slog("%s%s", line, NULL);
+            watchdog_keep(line);
         }
         if (!awake || !turn || now < turn || now - turn < WATCHDOG_MS || told == turn) continue;
         told = turn;
@@ -1609,6 +1707,7 @@ int main(int argc, char **argv)
     g_module_on = module_read();
     agent_ipc_start();
     wall_read(bl_now_ms());
+    readings_start();
     if (R_SUCCEEDED(threadCreate(&g_watchdog, watchdog, NULL, NULL, 0x2000, 0x2D, -2))) threadStart(&g_watchdog);
     // Below the loop's priority (0x2C): a check waiting on the network never delays a turn.
     if (R_SUCCEEDED(threadCreate(&g_checks, checks_thread, NULL, NULL, 0x6000, 0x30, -2))) threadStart(&g_checks);
